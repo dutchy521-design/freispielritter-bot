@@ -6,7 +6,7 @@ import string
 from telebot import types
 from datetime import datetime
 
-TOKEN = os.getenv("8559833135:AAGywbjavvmRebtEe1H7KLzHg8BLKN3Jx1k")
+TOKEN = os.getenv("TOKEN")
 bot = telebot.TeleBot(TOKEN)
 
 # ---------------- SETUP ----------------
