@@ -6,7 +6,10 @@ import string
 from telebot import types
 from datetime import datetime
 
+# ---------------- ENV ----------------
 TOKEN = os.getenv("TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+
 bot = telebot.TeleBot(TOKEN)
 
 # ---------------- SETUP ----------------
@@ -68,14 +71,11 @@ def start(message):
 
     if len(args) > 1:
         ref_code = args[1]
-
         ref_user_id = find_user_by_code(ref_code)
 
         if ref_user_id and user["used_ref"] is None and ref_user_id != user_id:
-
             data["users"][ref_user_id]["invites"] += 1
             user["used_ref"] = ref_code
-
             save_data()
 
             try:
@@ -84,7 +84,6 @@ def start(message):
                 pass
 
     markup = types.InlineKeyboardMarkup()
-
     markup.add(
         types.InlineKeyboardButton("✅ Ja, ich bin 18+", callback_data="age_yes"),
         types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
@@ -105,18 +104,15 @@ def callback(call):
 
     chat_id = str(call.message.chat.id)
 
-    # 18+
     if call.data == "age_yes":
 
         markup = types.InlineKeyboardMarkup()
-
         markup.add(
             types.InlineKeyboardButton(
                 "📢 Kanal beitreten",
                 url=f"https://t.me/{CHANNEL.replace('@','')}"
             )
         )
-
         markup.add(
             types.InlineKeyboardButton(
                 "✅ Ich bin beigetreten",
@@ -124,13 +120,8 @@ def callback(call):
             )
         )
 
-        bot.send_message(
-            chat_id,
-            "🔔 Bitte tritt zuerst dem Kanal bei:",
-            reply_markup=markup
-        )
+        bot.send_message(chat_id, "🔔 Bitte tritt zuerst dem Kanal bei:", reply_markup=markup)
 
-    # Join Check
     elif call.data == "join_channel":
 
         try:
@@ -151,21 +142,16 @@ def callback(call):
         verified_users.add(chat_id)
 
         user = get_user(chat_id)
-
-        bot_username = "Freispielritterbot"
-        ref_link = f"https://t.me/{bot_username}?start={user['ref_code']}"
+        ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
 
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-
         web_app = types.WebAppInfo("https://shiny-dolphin-f9ce7d.netlify.app/")
         markup.add(types.KeyboardButton("Jetzt starten 🚀", web_app=web_app))
 
         bot.send_message(
             chat_id,
             "✅ Zugriff freigeschaltet!\n\n"
-            f"🔗 Dein Referral Link:\n{ref_link}\n\n"
-            "📸 Wichtig:\n"
-            "Screenshots kannst du direkt hier im Bot senden – sie werden automatisch gespeichert.",
+            f"🔗 Dein Referral Link:\n{ref_link}",
             reply_markup=markup
         )
 
@@ -174,7 +160,7 @@ def callback(call):
 
     bot.answer_callback_query(call.id)
 
-# ---------------- SCREENSHOT ----------------
+# ---------------- SCREENSHOT (FIXED) ----------------
 
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
@@ -191,7 +177,15 @@ def handle_photo(message):
     with open(file_path, 'wb') as f:
         f.write(downloaded_file)
 
-    bot.send_message(message.chat.id, f"📸 Screenshot gespeichert von @{username}")
+    # 📲 SEND TO ADMIN
+    if ADMIN_ID:
+        try:
+            caption = f"📸 Screenshot\n👤 @{username}\n🆔 {user.id}\n🕒 {timestamp}"
+            bot.send_photo(ADMIN_ID, downloaded_file, caption=caption)
+        except Exception as e:
+            print("Admin send error:", e)
+
+    bot.send_message(message.chat.id, "📸 Screenshot gespeichert & gesendet 🚀")
 
 # ---------------- AVATAR ----------------
 
