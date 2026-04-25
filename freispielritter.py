@@ -26,7 +26,7 @@ app = Flask(__name__)
 def home():
     return "Freispielritter läuft 🚀"
 
-# ---------------- SAFE DATA INIT ----------------
+# ---------------- DATA ----------------
 DATA_FILE = "data.json"
 
 def init_data():
@@ -40,7 +40,7 @@ def load_data():
     with open(DATA_FILE, "r") as f:
         return json.load(f)
 
-def save_data():
+def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
@@ -62,7 +62,7 @@ def get_user(user_id):
             "invites": 0,
             "used_ref": None
         }
-        save_data()
+        save_data(data)
 
     return data["users"][user_id]
 
@@ -82,19 +82,17 @@ def ref():
 
     user_id = str(user_id)
 
-    users = data.get("users", {})
-
-    if user_id not in users:
+    if user_id not in data["users"]:
         return jsonify({"error": "not found"}), 404
 
-    user = users[user_id]
+    user = data["users"][user_id]
 
     return jsonify({
-        "ref_code": user.get("ref_code", ""),
-        "invites": user.get("invites", 0)
+        "ref_code": user["ref_code"],
+        "invites": user["invites"]
     })
 
-# ---------------- BOT ----------------
+# ---------------- START ----------------
 @bot.message_handler(commands=["start"])
 def start(message):
 
@@ -107,10 +105,10 @@ def start(message):
         ref_code = args[1]
         ref_user_id = find_user_by_code(ref_code)
 
-        if ref_user_id and user.get("used_ref") is None and ref_user_id != user_id:
+        if ref_user_id and user["used_ref"] is None and ref_user_id != user_id:
             data["users"][ref_user_id]["invites"] += 1
             user["used_ref"] = ref_code
-            save_data()
+            save_data(data)
 
             try:
                 bot.send_message(ref_user_id, "🎉 +1 Invite")
@@ -119,11 +117,14 @@ def start(message):
 
     markup = types.InlineKeyboardMarkup()
     markup.add(
-        types.InlineKeyboardButton("✅ 18+", callback_data="yes"),
-        types.InlineKeyboardButton("❌ Nein", callback_data="no")
+        types.InlineKeyboardButton("🚀 Start App", callback_data="go")
     )
 
-    bot.send_message(message.chat.id, "🔞 Bist du 18+?", reply_markup=markup)
+    bot.send_message(
+        message.chat.id,
+        "🔞 Bestätige um zu starten:",
+        reply_markup=markup
+    )
 
 # ---------------- CALLBACK ----------------
 CHANNEL = "@Freispielritter"
@@ -133,24 +134,24 @@ def callback(call):
 
     chat_id = str(call.message.chat.id)
 
-    if call.data == "yes":
-
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("📢 Kanal", url=f"https://t.me/{CHANNEL.replace('@','')}"))
-        markup.add(types.InlineKeyboardButton("✅ Weiter", callback_data="go"))
-
-        bot.send_message(chat_id, "👉 Kanal beitreten", reply_markup=markup)
-
-    elif call.data == "go":
+    if call.data == "go":
 
         user = get_user(chat_id)
         ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
 
+        web_app = types.WebAppInfo(
+            "https://shiny-dolphin-f9ce7d.netlify.app/"
+        )
+
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        web_app = types.WebAppInfo("https://shiny-dolphin-f9ce7d.netlify.app/")
         markup.add(types.KeyboardButton("🚀 Start", web_app=web_app))
 
-        bot.send_message(chat_id, f"✅ Freigeschaltet\nRef: {ref_link}", reply_markup=markup)
+        bot.send_message(
+            chat_id,
+            "✅ Zugriff freigeschaltet!\n\n"
+            f"🔗 Dein Ref-Link:\n{ref_link}",
+            reply_markup=markup
+        )
 
     bot.answer_callback_query(call.id)
 
