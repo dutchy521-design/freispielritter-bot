@@ -64,6 +64,23 @@ def find_user_by_ref(code):
 def is_admin(user_id):
     return int(user_id) == ADMIN_ID
 
+# ---------------- XP SYSTEM ----------------
+def add_xp(user_id, amount=10):
+
+    user = get_user(user_id)
+
+    xp = user.get("xp", 0) + amount
+
+    # Level System: 100 XP = Level Up
+    level = (xp // 100) + 1
+
+    update_user(user_id, {
+        "xp": xp,
+        "level": level
+    })
+
+    return xp, level
+
 # ---------------- START ----------------
 @bot.message_handler(commands=["start"])
 def start(message):
@@ -92,12 +109,15 @@ def start(message):
                     }]
                 })
 
+                # 🔥 XP + LEVEL ADD
+                add_xp(ref_user_id, 10)
+
                 update_user(user_id, {
                     "used_ref": ref_code
                 })
 
                 try:
-                    bot.send_message(ref_user_id, "🎉 Neuer Invite!")
+                    bot.send_message(ref_user_id, "🎉 Neuer Invite + XP erhalten!")
                 except:
                     pass
 
@@ -176,47 +196,7 @@ def handle_photo(message):
 
     bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption)
 
-# ---------------- ADMIN DASHBOARD ----------------
-@bot.message_handler(commands=["admin_stats"])
-def admin_stats(message):
-
-    if not is_admin(message.from_user.id):
-        return
-
-    res = supabase.table("users").select("*").execute()
-    users = res.data or []
-
-    total_users = len(users)
-    total_invites = sum(u.get("invites", 0) for u in users)
-    total_xp = sum(u.get("xp", 0) for u in users)
-
-    text = (
-        "📊 ADMIN DASHBOARD\n\n"
-        f"👤 Users: {total_users}\n"
-        f"👥 Invites: {total_invites}\n"
-        f"⭐ XP: {total_xp}\n"
-    )
-
-    bot.send_message(message.chat.id, text)
-
-@bot.message_handler(commands=["admin_top"])
-def admin_top(message):
-
-    if not is_admin(message.from_user.id):
-        return
-
-    res = supabase.table("users").select("*").execute()
-    users = res.data or []
-
-    ranking = sorted(users, key=lambda x: x.get("invites", 0), reverse=True)
-
-    text = "🏆 TOP INVITER\n\n"
-
-    for i, u in enumerate(ranking[:10], start=1):
-        text += f"{i}. {u['id']} — {u.get('invites',0)} Invites\n"
-
-    bot.send_message(message.chat.id, text)
-
+# ---------------- ADMIN ----------------
 @bot.message_handler(commands=["admin_user"])
 def admin_user(message):
 
@@ -304,7 +284,7 @@ def run_web():
     app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
-    print("Bot + Admin Dashboard läuft 🚀")
+    print("Bot läuft mit XP System 🚀")
 
     threading.Thread(target=run_web, daemon=True).start()
     bot.infinity_polling(skip_pending=True)
