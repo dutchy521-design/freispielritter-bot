@@ -14,35 +14,14 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 bot = telebot.TeleBot(TOKEN)
 
-# ---------------- FLASK ----------------
+# ---------------- FLASK APP ----------------
 app = Flask(__name__)
 
 @app.route("/")
 def home():
     return "Freispielritter läuft 🚀"
 
-# 🔗 MINI APP API – USER DATEN
-@app.route("/ref")
-def get_ref():
-    user_id = request.args.get("id")
-
-    if not user_id or user_id not in data["users"]:
-        return jsonify({"error": "not found"})
-
-    user = data["users"][user_id]
-
-    return jsonify({
-        "ref_code": user["ref_code"],
-        "invites": user["invites"]
-    })
-
-
-def run_web():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
-
 # ---------------- DATA ----------------
-
 DATA_FILE = "data.json"
 
 if not os.path.exists(DATA_FILE):
@@ -57,4 +36,28 @@ def save_data():
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-bot.infinity_polling()
+data = load_data()
+
+verified_users = set()
+
+# ---------------- REF SYSTEM ----------------
+
+def generate_code():
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
+
+
+def get_user(user_id):
+    user_id = str(user_id)
+
+    if user_id not in data["users"]:
+        data["users"][user_id] = {
+            "ref_code": generate_code(),
+            "invites": 0,
+            "used_ref": None
+        }
+        save_data()
+
+    return data["users"][user_id]
+
+
+    bot.infinity_polling()
