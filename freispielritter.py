@@ -8,6 +8,14 @@ from flask import Flask, request, jsonify
 import threading
 from datetime import datetime
 
+# ---------------- SUPABASE ----------------
+from supabase import create_client, Client
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 # ---------------- ENV ----------------
 TOKEN = os.getenv("TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
@@ -111,6 +119,15 @@ def update_xp():
 
     return jsonify({"ok": True})
 
+# ---------------- DB TEST ----------------
+@bot.message_handler(commands=["dbtest"])
+def dbtest(message):
+    try:
+        res = supabase.table("users").select("*").limit(1).execute()
+        bot.send_message(message.chat.id, "✅ DB Verbindung OK")
+    except Exception as e:
+        bot.send_message(message.chat.id, f"❌ DB Fehler: {e}")
+
 # ---------------- START ----------------
 @bot.message_handler(commands=["start"])
 def start(message):
@@ -212,38 +229,7 @@ def invites(message):
 
     bot.send_message(message.chat.id, text)
 
-# ---------------- ADMIN ALL ----------------
-@bot.message_handler(commands=["admin_invites"])
-def admin_invites(message):
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    text = "📊 Invite Log\n\n"
-
-    for uid, u in data["users"].items():
-
-        invites = u.get("invite_list", [])
-
-        if not invites:
-            continue
-
-        text += f"{uid}\n"
-
-        for inv in invites:
-            name = inv["username"]
-            date = inv["date"]
-
-            if name != "unknown":
-                name = "@" + name
-
-            text += f" └ {name} — {date}\n"
-
-        text += "\n"
-
-    bot.send_message(message.chat.id, text)
-
-# ---------------- ADMIN USER ----------------
+# ---------------- ADMIN ----------------
 @bot.message_handler(commands=["admin_user"])
 def admin_user(message):
 
@@ -263,23 +249,10 @@ def admin_user(message):
         return
 
     user = data["users"][uid]
-    invites = user.get("invite_list", [])
 
-    text = f"User: {uid}\n"
-    text += f"Invites: {len(invites)}\n\n"
+    bot.send_message(message.chat.id, f"User {uid}\nInvites: {user.get('invites',0)}")
 
-    for i, inv in enumerate(invites, start=1):
-        name = inv["username"]
-        date = inv["date"]
-
-        if name != "unknown":
-            name = "@" + name
-
-        text += f"{i}. {name} — {date}\n"
-
-    bot.send_message(message.chat.id, text)
-
-# ---------------- SCREENSHOTS / FILES ----------------
+# ---------------- SCREENSHOTS ----------------
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
 
@@ -298,35 +271,7 @@ def handle_photo(message):
         f"🕒 Zeit: {time}"
     )
 
-    bot.send_photo(
-        ADMIN_ID,
-        message.photo[-1].file_id,
-        caption=caption
-    )
-
-@bot.message_handler(content_types=['document'])
-def handle_document(message):
-
-    if ADMIN_ID == 0:
-        return
-
-    username = message.from_user.username
-    username = f"@{username}" if username else "unknown"
-
-    time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-
-    caption = (
-        "📎 DATEI / SCREENSHOT\n\n"
-        f"👤 User ID: {message.from_user.id}\n"
-        f"🧑 Username: {username}\n"
-        f"🕒 Zeit: {time}"
-    )
-
-    bot.send_document(
-        ADMIN_ID,
-        message.document.file_id,
-        caption=caption
-    )
+    bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption)
 
 # ---------------- CALLBACK ----------------
 CHANNEL = "@Freispielritter"
@@ -338,69 +283,22 @@ def callback(call):
 
     if call.data == "age_no":
         bot.send_message(chat_id, "❌ Zugriff verweigert.")
-        bot.answer_callback_query(call.id)
         return
 
     if call.data == "age_yes":
 
         markup = types.InlineKeyboardMarkup()
-        markup.add(
-            types.InlineKeyboardButton(
-                "📢 Kanal beitreten",
-                url=f"https://t.me/{CHANNEL.replace('@','')}"
-            )
-        )
-        markup.add(
-            types.InlineKeyboardButton(
-                "✅ Ich bin beigetreten",
-                callback_data="check_channel"
-            )
-        )
+        markup.add(types.InlineKeyboardButton("📢 Kanal", url="https://t.me/Freispielritter"))
 
-        bot.send_message(chat_id, "👉 Bitte trete dem Kanal bei:", reply_markup=markup)
+        bot.send_message(chat_id, "👉 Join:", reply_markup=markup)
 
-    elif call.data == "check_channel":
-
-        try:
-            member = bot.get_chat_member(CHANNEL, chat_id)
-
-            if member.status not in ["member", "administrator", "creator"]:
-                bot.answer_callback_query(call.id, "❌ Bitte zuerst beitreten!", show_alert=True)
-                return
-
-        except:
-            bot.answer_callback_query(call.id, "❌ Fehler beim Prüfen", show_alert=True)
-            return
-
-        user = get_user(chat_id)
-
-        ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
-
-        web_app = types.WebAppInfo(
-            "https://shiny-dolphin-f9ce7d.netlify.app/"
-        )
-
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add(types.KeyboardButton("🚀 Mini App starten", web_app=web_app))
-
-        bot.send_message(
-            chat_id,
-            "✅ Freigeschaltet!\n\n"
-            f"🔗 Dein Ref-Link:\n{ref_link}",
-            reply_markup=markup
-        )
-
-    bot.answer_callback_query(call.id)
-
-# ---------------- WEB ----------------
+# ---------------- START ----------------
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
-# ---------------- START ----------------
 if __name__ == "__main__":
-    print("Bot + Web startet...")
+    print("Bot läuft...")
 
     threading.Thread(target=run_web, daemon=True).start()
-
     bot.infinity_polling(skip_pending=True)
