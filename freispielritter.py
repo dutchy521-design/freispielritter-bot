@@ -26,12 +26,15 @@ app = Flask(__name__)
 def home():
     return "Freispielritter läuft 🚀"
 
-# ---------------- DATA ----------------
+# ---------------- SAFE DATA INIT ----------------
 DATA_FILE = "data.json"
 
-if not os.path.exists(DATA_FILE):
-    with open(DATA_FILE, "w") as f:
-        json.dump({"users": {}}, f)
+def init_data():
+    if not os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "w") as f:
+            json.dump({"users": {}}, f)
+
+init_data()
 
 def load_data():
     with open(DATA_FILE, "r") as f:
@@ -42,6 +45,9 @@ def save_data():
         json.dump(data, f, indent=4)
 
 data = load_data()
+
+if "users" not in data:
+    data["users"] = {}
 
 # ---------------- REF SYSTEM ----------------
 def generate_code():
@@ -62,7 +68,7 @@ def get_user(user_id):
 
 def find_user_by_code(code):
     for uid, u in data["users"].items():
-        if u["ref_code"] == code:
+        if u.get("ref_code") == code:
             return uid
     return None
 
@@ -76,14 +82,16 @@ def ref():
 
     user_id = str(user_id)
 
-    if user_id not in data["users"]:
+    users = data.get("users", {})
+
+    if user_id not in users:
         return jsonify({"error": "not found"}), 404
 
-    user = data["users"][user_id]
+    user = users[user_id]
 
     return jsonify({
-        "ref_code": user["ref_code"],
-        "invites": user["invites"]
+        "ref_code": user.get("ref_code", ""),
+        "invites": user.get("invites", 0)
     })
 
 # ---------------- BOT ----------------
@@ -99,13 +107,13 @@ def start(message):
         ref_code = args[1]
         ref_user_id = find_user_by_code(ref_code)
 
-        if ref_user_id and user["used_ref"] is None and ref_user_id != user_id:
+        if ref_user_id and user.get("used_ref") is None and ref_user_id != user_id:
             data["users"][ref_user_id]["invites"] += 1
             user["used_ref"] = ref_code
             save_data()
 
             try:
-                bot.send_message(ref_user_id, "🎉 +1 Invite!")
+                bot.send_message(ref_user_id, "🎉 +1 Invite")
             except:
                 pass
 
@@ -131,7 +139,7 @@ def callback(call):
         markup.add(types.InlineKeyboardButton("📢 Kanal", url=f"https://t.me/{CHANNEL.replace('@','')}"))
         markup.add(types.InlineKeyboardButton("✅ Weiter", callback_data="go"))
 
-        bot.send_message(chat_id, "👉 Bitte Kanal beitreten", reply_markup=markup)
+        bot.send_message(chat_id, "👉 Kanal beitreten", reply_markup=markup)
 
     elif call.data == "go":
 
@@ -146,7 +154,7 @@ def callback(call):
 
     bot.answer_callback_query(call.id)
 
-# ---------------- WEB SERVER ----------------
+# ---------------- WEB ----------------
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
