@@ -6,6 +6,7 @@ import string
 from telebot import types
 from flask import Flask, request, jsonify
 import threading
+from datetime import datetime
 
 # ---------------- ENV ----------------
 TOKEN = os.getenv("TOKEN")
@@ -57,14 +58,22 @@ def get_user(user_id):
         data["users"][user_id] = {
             "ref_code": generate_code(),
             "invites": 0,
+            "invite_list": [],
             "xp": 0,
-            "level": 1
+            "level": 1,
+            "used_ref": None
         }
         save_data(data)
 
     return data["users"][user_id]
 
-# ---------------- XP API (LOAD) ----------------
+def find_user_by_ref(code):
+    for uid, u in data["users"].items():
+        if u.get("ref_code") == code:
+            return uid
+    return None
+
+# ---------------- XP API ----------------
 @app.route("/xp")
 def get_xp():
     user_id = request.args.get("id")
@@ -84,7 +93,6 @@ def get_xp():
         "level": u.get("level", 1)
     })
 
-# ---------------- XP API (UPDATE) ----------------
 @app.route("/xp/update", methods=["POST"])
 def update_xp():
     body = request.json
@@ -108,7 +116,32 @@ def update_xp():
 def start(message):
 
     user_id = str(message.from_user.id)
-    get_user(user_id)
+    user = get_user(user_id)
+
+    args = message.text.split()
+
+    if len(args) > 1:
+        ref_code = args[1]
+        ref_user_id = find_user_by_ref(ref_code)
+
+        if ref_user_id and ref_user_id != user_id and user.get("used_ref") is None:
+
+            inviter = data["users"][ref_user_id]
+
+            inviter["invites"] += 1
+            inviter["invite_list"].append({
+                "id": user_id,
+                "username": message.from_user.username or "unknown",
+                "date": datetime.now().strftime("%d.%m.%Y")
+            })
+
+            user["used_ref"] = ref_code
+            save_data(data)
+
+            try:
+                bot.send_message(ref_user_id, "🎉 Neuer Invite!")
+            except:
+                pass
 
     markup = types.InlineKeyboardMarkup()
     markup.add(
@@ -121,6 +154,130 @@ def start(message):
         "🔞 Bist du 18 Jahre oder älter?",
         reply_markup=markup
     )
+
+# ---------------- TOP ----------------
+@bot.message_handler(commands=["top"])
+def top(message):
+
+    user_id = str(message.from_user.id)
+
+    ranking = sorted(
+        data["users"].items(),
+        key=lambda x: x[1].get("invites", 0),
+        reverse=True
+    )
+
+    text = "🏆 Top 5 Inviter\n\n"
+
+    for i, (uid, u) in enumerate(ranking[:5], start=1):
+        text += f"{i}. User*** — {u.get('invites',0)}\n"
+
+    pos = 0
+    for i, (uid, _) in enumerate(ranking, start=1):
+        if uid == user_id:
+            pos = i
+            break
+
+    my_inv = data["users"].get(user_id, {}).get("invites", 0)
+
+    text += "\n────────────\n"
+    text += f"Du bist Platz #{pos}\n"
+    text += f"Deine Invites: {my_inv}"
+
+    bot.send_message(message.chat.id, text)
+
+# ---------------- USER INVITES ----------------
+@bot.message_handler(commands=["invites"])
+def invites(message):
+
+    user_id = str(message.from_user.id)
+    user = get_user(user_id)
+
+    invites = user.get("invite_list", [])
+
+    if not invites:
+        bot.send_message(message.chat.id, "Keine Invites vorhanden.")
+        return
+
+    text = "👥 Deine Invites\n\n"
+
+    for i, inv in enumerate(invites, start=1):
+        name = inv["username"]
+        date = inv["date"]
+
+        if name != "unknown":
+            name = "@" + name
+
+        text += f"{i}. {name} — {date}\n"
+
+    bot.send_message(message.chat.id, text)
+
+# ---------------- ADMIN ALL ----------------
+@bot.message_handler(commands=["admin_invites"])
+def admin_invites(message):
+
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    text = "📊 Invite Log\n\n"
+
+    for uid, u in data["users"].items():
+
+        invites = u.get("invite_list", [])
+
+        if not invites:
+            continue
+
+        text += f"{uid}\n"
+
+        for inv in invites:
+            name = inv["username"]
+            date = inv["date"]
+
+            if name != "unknown":
+                name = "@" + name
+
+            text += f" └ {name} — {date}\n"
+
+        text += "\n"
+
+    bot.send_message(message.chat.id, text)
+
+# ---------------- ADMIN USER ----------------
+@bot.message_handler(commands=["admin_user"])
+def admin_user(message):
+
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    args = message.text.split()
+
+    if len(args) < 2:
+        bot.send_message(message.chat.id, "Nutze: /admin_user ID")
+        return
+
+    uid = args[1]
+
+    if uid not in data["users"]:
+        bot.send_message(message.chat.id, "User nicht gefunden")
+        return
+
+    user = data["users"][uid]
+    invites = user.get("invite_list", [])
+
+    text = f"User: {uid}\n"
+    text += f"Invites: {len(invites)}\n\n"
+
+    for i, inv in enumerate(invites, start=1):
+        name = inv["username"]
+        date = inv["date"]
+
+        if name != "unknown":
+            name = "@" + name
+
+        text += f"{i}. {name} — {date}\n"
+
+    bot.send_message(message.chat.id, text)
 
 # ---------------- CALLBACK ----------------
 CHANNEL = "@Freispielritter"
