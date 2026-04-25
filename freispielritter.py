@@ -95,17 +95,6 @@ def sync_user_db(user_id):
     except Exception as e:
         print("DB sync error:", e)
 
-def update_xp_db(user_id):
-    try:
-        user = data["users"][str(user_id)]
-
-        supabase.table("users").update({
-            "xp": user.get("xp", 0),
-            "level": user.get("level", 1)
-        }).eq("id", str(user_id)).execute()
-    except Exception as e:
-        print("XP DB error:", e)
-
 def update_invites_db(user_id):
     try:
         user = data["users"][str(user_id)]
@@ -120,7 +109,7 @@ def update_invites_db(user_id):
 @bot.message_handler(commands=["dbtest"])
 def dbtest(message):
     try:
-        res = supabase.table("users").select("*").limit(1).execute()
+        supabase.table("users").select("*").limit(1).execute()
         bot.send_message(message.chat.id, "✅ DB Verbindung OK")
     except Exception as e:
         bot.send_message(message.chat.id, f"❌ DB Fehler: {e}")
@@ -132,7 +121,7 @@ def start(message):
     user_id = str(message.from_user.id)
     user = get_user(user_id)
 
-    # 🔥 SUPABASE SYNC (neu)
+    # sync to DB
     sync_user_db(user_id)
 
     args = message.text.split()
@@ -155,7 +144,6 @@ def start(message):
             user["used_ref"] = ref_code
             save_data(data)
 
-            # 🔥 DB UPDATE INVITES
             update_invites_db(ref_user_id)
 
             try:
@@ -268,11 +256,44 @@ def callback(call):
     if call.data == "age_yes":
 
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("📢 Kanal", url="https://t.me/Freispielritter"))
+        markup.add(types.InlineKeyboardButton("📢 Kanal beitreten", url="https://t.me/Freispielritter"))
+        markup.add(types.InlineKeyboardButton("✅ Ich bin beigetreten", callback_data="check_channel"))
 
-        bot.send_message(chat_id, "👉 Join:", reply_markup=markup)
+        bot.send_message(chat_id, "👉 Bitte trete dem Kanal bei:", reply_markup=markup)
+        return
 
-# ---------------- START ----------------
+    if call.data == "check_channel":
+
+        try:
+            member = bot.get_chat_member(CHANNEL, call.from_user.id)
+
+            if member.status not in ["member", "administrator", "creator"]:
+                bot.send_message(chat_id, "❌ Bitte zuerst dem Kanal beitreten!")
+                return
+
+        except:
+            bot.send_message(chat_id, "❌ Fehler beim Prüfen")
+            return
+
+        user = get_user(chat_id)
+
+        ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
+
+        web_app = types.WebAppInfo(
+            "https://shiny-dolphin-f9ce7d.netlify.app/"
+        )
+
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(types.KeyboardButton("🚀 Mini App starten", web_app=web_app))
+
+        bot.send_message(
+            chat_id,
+            "✅ Freigeschaltet!\n\n"
+            f"🔗 Dein Ref-Link:\n{ref_link}",
+            reply_markup=markup
+        )
+
+# ---------------- WEB ----------------
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
