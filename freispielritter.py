@@ -81,43 +81,40 @@ def find_user_by_ref(code):
             return uid
     return None
 
-# ---------------- XP API ----------------
-@app.route("/xp")
-def get_xp():
-    user_id = request.args.get("id")
+# ---------------- SUPABASE HELPERS ----------------
+def sync_user_db(user_id):
+    try:
+        user = data["users"][str(user_id)]
 
-    if not user_id:
-        return jsonify({"error": "no id"}), 400
+        supabase.table("users").upsert({
+            "id": str(user_id),
+            "xp": user.get("xp", 0),
+            "level": user.get("level", 1),
+            "invites": user.get("invites", 0)
+        }).execute()
+    except Exception as e:
+        print("DB sync error:", e)
 
-    user_id = str(user_id)
+def update_xp_db(user_id):
+    try:
+        user = data["users"][str(user_id)]
 
-    if user_id not in data["users"]:
-        return jsonify({"error": "not found"}), 404
+        supabase.table("users").update({
+            "xp": user.get("xp", 0),
+            "level": user.get("level", 1)
+        }).eq("id", str(user_id)).execute()
+    except Exception as e:
+        print("XP DB error:", e)
 
-    u = data["users"][user_id]
+def update_invites_db(user_id):
+    try:
+        user = data["users"][str(user_id)]
 
-    return jsonify({
-        "xp": u.get("xp", 0),
-        "level": u.get("level", 1)
-    })
-
-@app.route("/xp/update", methods=["POST"])
-def update_xp():
-    body = request.json
-
-    user_id = str(body.get("id"))
-    xp = int(body.get("xp", 0))
-    level = int(body.get("level", 1))
-
-    if user_id not in data["users"]:
-        return jsonify({"error": "not found"}), 404
-
-    data["users"][user_id]["xp"] = xp
-    data["users"][user_id]["level"] = level
-
-    save_data(data)
-
-    return jsonify({"ok": True})
+        supabase.table("users").update({
+            "invites": user.get("invites", 0)
+        }).eq("id", str(user_id)).execute()
+    except Exception as e:
+        print("Invite DB error:", e)
 
 # ---------------- DB TEST ----------------
 @bot.message_handler(commands=["dbtest"])
@@ -134,6 +131,9 @@ def start(message):
 
     user_id = str(message.from_user.id)
     user = get_user(user_id)
+
+    # 🔥 SUPABASE SYNC (neu)
+    sync_user_db(user_id)
 
     args = message.text.split()
 
@@ -154,6 +154,9 @@ def start(message):
 
             user["used_ref"] = ref_code
             save_data(data)
+
+            # 🔥 DB UPDATE INVITES
+            update_invites_db(ref_user_id)
 
             try:
                 bot.send_message(ref_user_id, "🎉 Neuer Invite!")
@@ -228,29 +231,6 @@ def invites(message):
         text += f"{i}. {name} — {date}\n"
 
     bot.send_message(message.chat.id, text)
-
-# ---------------- ADMIN ----------------
-@bot.message_handler(commands=["admin_user"])
-def admin_user(message):
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    args = message.text.split()
-
-    if len(args) < 2:
-        bot.send_message(message.chat.id, "Nutze: /admin_user ID")
-        return
-
-    uid = args[1]
-
-    if uid not in data["users"]:
-        bot.send_message(message.chat.id, "User nicht gefunden")
-        return
-
-    user = data["users"][uid]
-
-    bot.send_message(message.chat.id, f"User {uid}\nInvites: {user.get('invites',0)}")
 
 # ---------------- SCREENSHOTS ----------------
 @bot.message_handler(content_types=['photo'])
