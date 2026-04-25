@@ -4,7 +4,7 @@ import json
 import random
 import string
 from telebot import types
-from flask import Flask
+from flask import Flask, request, jsonify
 import threading
 
 # ---------------- ENV ----------------
@@ -19,7 +19,7 @@ ADMIN_ID = int(ADMIN_ID) if ADMIN_ID else 0
 
 bot = telebot.TeleBot(TOKEN)
 
-# ---------------- FLASK (nur keep alive) ----------------
+# ---------------- FLASK ----------------
 app = Flask(__name__)
 
 @app.route("/")
@@ -46,7 +46,7 @@ data = load_data()
 if "users" not in data:
     data["users"] = {}
 
-# ---------------- REF SYSTEM ----------------
+# ---------------- REF + USER ----------------
 def generate_code():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
 
@@ -56,11 +56,52 @@ def get_user(user_id):
     if user_id not in data["users"]:
         data["users"][user_id] = {
             "ref_code": generate_code(),
-            "invites": 0
+            "invites": 0,
+            "xp": 0,
+            "level": 1
         }
         save_data(data)
 
     return data["users"][user_id]
+
+# ---------------- XP API (LOAD) ----------------
+@app.route("/xp")
+def get_xp():
+    user_id = request.args.get("id")
+
+    if not user_id:
+        return jsonify({"error": "no id"}), 400
+
+    user_id = str(user_id)
+
+    if user_id not in data["users"]:
+        return jsonify({"error": "not found"}), 404
+
+    u = data["users"][user_id]
+
+    return jsonify({
+        "xp": u.get("xp", 0),
+        "level": u.get("level", 1)
+    })
+
+# ---------------- XP API (UPDATE) ----------------
+@app.route("/xp/update", methods=["POST"])
+def update_xp():
+    body = request.json
+
+    user_id = str(body.get("id"))
+    xp = int(body.get("xp", 0))
+    level = int(body.get("level", 1))
+
+    if user_id not in data["users"]:
+        return jsonify({"error": "not found"}), 404
+
+    data["users"][user_id]["xp"] = xp
+    data["users"][user_id]["level"] = level
+
+    save_data(data)
+
+    return jsonify({"ok": True})
 
 # ---------------- START ----------------
 @bot.message_handler(commands=["start"])
@@ -89,13 +130,11 @@ def callback(call):
 
     chat_id = str(call.message.chat.id)
 
-    # ❌ NO
     if call.data == "age_no":
         bot.send_message(chat_id, "❌ Zugriff verweigert.")
         bot.answer_callback_query(call.id)
         return
 
-    # 🔞 YES → Channel Check
     if call.data == "age_yes":
 
         markup = types.InlineKeyboardMarkup()
@@ -112,13 +151,8 @@ def callback(call):
             )
         )
 
-        bot.send_message(
-            chat_id,
-            "👉 Bitte trete dem Kanal bei:",
-            reply_markup=markup
-        )
+        bot.send_message(chat_id, "👉 Bitte trete dem Kanal bei:", reply_markup=markup)
 
-    # 📢 CHANNEL CHECK
     elif call.data == "check_channel":
 
         try:
@@ -132,7 +166,6 @@ def callback(call):
             bot.answer_callback_query(call.id, "❌ Fehler beim Prüfen", show_alert=True)
             return
 
-        # ---------------- SUCCESS ----------------
         user = get_user(chat_id)
 
         ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
