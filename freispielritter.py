@@ -39,7 +39,6 @@ def get_user(user_id):
     if res.data:
         return res.data[0]
 
-    # create user if not exists
     new_user = {
         "id": user_id,
         "xp": 0,
@@ -61,6 +60,9 @@ def find_user_by_ref(code):
     if res.data:
         return res.data[0]["id"]
     return None
+
+def is_admin(user_id):
+    return int(user_id) == ADMIN_ID
 
 # ---------------- START ----------------
 @bot.message_handler(commands=["start"])
@@ -174,6 +176,80 @@ def handle_photo(message):
 
     bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption)
 
+# ---------------- ADMIN DASHBOARD ----------------
+@bot.message_handler(commands=["admin_stats"])
+def admin_stats(message):
+
+    if not is_admin(message.from_user.id):
+        return
+
+    res = supabase.table("users").select("*").execute()
+    users = res.data or []
+
+    total_users = len(users)
+    total_invites = sum(u.get("invites", 0) for u in users)
+    total_xp = sum(u.get("xp", 0) for u in users)
+
+    text = (
+        "📊 ADMIN DASHBOARD\n\n"
+        f"👤 Users: {total_users}\n"
+        f"👥 Invites: {total_invites}\n"
+        f"⭐ XP: {total_xp}\n"
+    )
+
+    bot.send_message(message.chat.id, text)
+
+@bot.message_handler(commands=["admin_top"])
+def admin_top(message):
+
+    if not is_admin(message.from_user.id):
+        return
+
+    res = supabase.table("users").select("*").execute()
+    users = res.data or []
+
+    ranking = sorted(users, key=lambda x: x.get("invites", 0), reverse=True)
+
+    text = "🏆 TOP INVITER\n\n"
+
+    for i, u in enumerate(ranking[:10], start=1):
+        text += f"{i}. {u['id']} — {u.get('invites',0)} Invites\n"
+
+    bot.send_message(message.chat.id, text)
+
+@bot.message_handler(commands=["admin_user"])
+def admin_user(message):
+
+    if not is_admin(message.from_user.id):
+        return
+
+    args = message.text.split()
+
+    if len(args) < 2:
+        bot.send_message(message.chat.id, "Nutze: /admin_user ID")
+        return
+
+    uid = args[1]
+
+    res = supabase.table("users").select("*").eq("id", uid).execute()
+
+    if not res.data:
+        bot.send_message(message.chat.id, "User nicht gefunden")
+        return
+
+    u = res.data[0]
+
+    text = (
+        f"👤 USER INFO\n\n"
+        f"ID: {u['id']}\n"
+        f"Invites: {u.get('invites',0)}\n"
+        f"XP: {u.get('xp',0)}\n"
+        f"Level: {u.get('level',1)}\n"
+        f"Ref: {u.get('ref_code','-')}\n"
+    )
+
+    bot.send_message(message.chat.id, text)
+
 # ---------------- CALLBACK ----------------
 CHANNEL = "@Freispielritter"
 
@@ -228,7 +304,7 @@ def run_web():
     app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
-    print("Phase 4 Bot läuft...")
+    print("Bot + Admin Dashboard läuft 🚀")
 
     threading.Thread(target=run_web, daemon=True).start()
     bot.infinity_polling(skip_pending=True)
