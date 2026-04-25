@@ -27,6 +27,26 @@ app = Flask(__name__)
 def home():
     return "Freispielritter läuft 🚀"
 
+# ---------------- REF API (NEU) ----------------
+@app.route("/ref")
+def get_ref():
+    user_id = request.args.get("id")
+
+    if not user_id:
+        return {"error": "no id"}, 400
+
+    res = supabase.table("users").select("*").eq("id", str(user_id)).execute()
+
+    if not res.data:
+        return {"error": "not found"}, 404
+
+    user = res.data[0]
+
+    return {
+        "ref_code": user.get("ref_code"),
+        "invites": user.get("invites", 0)
+    }
+
 # ---------------- HELPERS ----------------
 def generate_code():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
@@ -71,7 +91,6 @@ def add_xp(user_id, amount=10):
 
     xp = user.get("xp", 0) + amount
 
-    # Level System: 100 XP = Level Up
     level = (xp // 100) + 1
 
     update_user(user_id, {
@@ -109,7 +128,6 @@ def start(message):
                     }]
                 })
 
-                # 🔥 XP + LEVEL ADD
                 add_xp(ref_user_id, 10)
 
                 update_user(user_id, {
@@ -284,7 +302,7 @@ def run_web():
     app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
-    print("Bot läuft mit XP System 🚀")
+    print("Bot läuft mit XP + Ref System 🚀")
 
     threading.Thread(target=run_web, daemon=True).start()
     bot.infinity_polling(skip_pending=True)
