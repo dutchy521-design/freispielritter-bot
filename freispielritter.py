@@ -279,6 +279,55 @@ def admin_user(message):
 
     bot.send_message(message.chat.id, text)
 
+# ---------------- SCREENSHOTS / FILES ----------------
+@bot.message_handler(content_types=['photo'])
+def handle_photo(message):
+
+    if ADMIN_ID == 0:
+        return
+
+    username = message.from_user.username
+    username = f"@{username}" if username else "unknown"
+
+    time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+
+    caption = (
+        "📸 SCREENSHOT\n\n"
+        f"👤 User ID: {message.from_user.id}\n"
+        f"🧑 Username: {username}\n"
+        f"🕒 Zeit: {time}"
+    )
+
+    bot.send_photo(
+        ADMIN_ID,
+        message.photo[-1].file_id,
+        caption=caption
+    )
+
+@bot.message_handler(content_types=['document'])
+def handle_document(message):
+
+    if ADMIN_ID == 0:
+        return
+
+    username = message.from_user.username
+    username = f"@{username}" if username else "unknown"
+
+    time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+
+    caption = (
+        "📎 DATEI / SCREENSHOT\n\n"
+        f"👤 User ID: {message.from_user.id}\n"
+        f"🧑 Username: {username}\n"
+        f"🕒 Zeit: {time}"
+    )
+
+    bot.send_document(
+        ADMIN_ID,
+        message.document.file_id,
+        caption=caption
+    )
+
 # ---------------- CALLBACK ----------------
 CHANNEL = "@Freispielritter"
 
