@@ -183,7 +183,7 @@ def start(message):
 
     bot.send_message(message.chat.id, "🔞 Bist du 18 Jahre oder älter?", reply_markup=markup)
 
-# ---------------- CALLBACK (FIXED FULL FLOW) ----------------
+# ---------------- CALLBACK FIX (STABIL + NO DEAD END) ----------------
 CHANNEL = "@Freispielritter"
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -191,10 +191,12 @@ def callback(call):
 
     chat_id = call.message.chat.id
 
+    # 18+ NO
     if call.data == "age_no":
         bot.send_message(chat_id, "❌ Zugriff verweigert.")
         return
 
+    # 18+ YES
     if call.data == "age_yes":
 
         markup = types.InlineKeyboardMarkup()
@@ -210,18 +212,20 @@ def callback(call):
         bot.send_message(chat_id, "👉 Bitte trete dem Kanal bei:", reply_markup=markup)
         return
 
+    # CHANNEL CHECK (FIXED - NO DEAD END)
     if call.data == "check_channel":
 
         try:
             member = bot.get_chat_member(CHANNEL, call.from_user.id)
-
-            if member.status not in ["member", "administrator", "creator"]:
-                bot.send_message(chat_id, "❌ Du bist noch nicht im Kanal.")
-                return
+            status = member.status
 
         except Exception as e:
-            print("Channel error:", e)
-            bot.send_message(chat_id, "❌ Kanalprüfung fehlgeschlagen")
+            print("CHANNEL ERROR:", e)
+            bot.send_message(chat_id, "⚠️ Kanalprüfung aktuell nicht möglich. Bitte später erneut klicken.")
+            return
+
+        if status not in ["member", "administrator", "creator"]:
+            bot.send_message(chat_id, "❌ Du bist noch nicht im Kanal.")
             return
 
         user = get_user(str(chat_id))
@@ -242,7 +246,7 @@ def callback(call):
             reply_markup=markup
         )
 
-# ---------------- SCREENSHOT FIX ----------------
+# ---------------- SCREENSHOT (WORKING) ----------------
 @bot.message_handler(content_types=['photo'])
 def screenshot(message):
 
