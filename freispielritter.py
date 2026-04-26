@@ -3,7 +3,7 @@ import os
 import random
 import string
 from telebot import types
-from flask import Flask
+from flask import Flask, request, jsonify
 import threading
 from datetime import datetime
 from supabase import create_client, Client
@@ -64,6 +64,61 @@ def find_user_by_ref(code):
 def is_admin(user_id):
     return int(user_id) == ADMIN_ID
 
+# =============================
+# API ROUTES (MINI APP FIX)
+# =============================
+
+@app.route("/xp")
+def get_xp():
+
+    user_id = request.args.get("id")
+
+    if not user_id:
+        return jsonify({"error": "no id"})
+
+    user = get_user(user_id)
+
+    return jsonify({
+        "xp": user.get("xp", 0),
+        "level": user.get("level", 1)
+    })
+
+
+@app.route("/xp/update", methods=["POST"])
+def update_xp():
+
+    data = request.json
+    user_id = str(data.get("id"))
+
+    if not user_id:
+        return jsonify({"error": "no id"})
+
+    xp = int(data.get("xp", 0))
+    level = int(data.get("level", 1))
+
+    update_user(user_id, {
+        "xp": xp,
+        "level": level
+    })
+
+    return jsonify({"ok": True})
+
+
+@app.route("/ref")
+def get_ref():
+
+    user_id = request.args.get("id")
+
+    if not user_id:
+        return jsonify({"error": "no id"})
+
+    user = get_user(user_id)
+
+    return jsonify({
+        "ref_code": user.get("ref_code"),
+        "invites": user.get("invites", 0)
+    })
+
 # ---------------- XP SYSTEM ----------------
 def add_xp(user_id, amount=10):
 
@@ -107,7 +162,6 @@ def start(message):
                     }]
                 })
 
-                # XP + LEVEL
                 add_xp(ref_user_id, 10)
 
                 update_user(user_id, {
@@ -130,107 +184,6 @@ def start(message):
         "🔞 Bist du 18 Jahre oder älter?",
         reply_markup=markup
     )
-
-# ---------------- TOP ----------------
-@bot.message_handler(commands=["top"])
-def top(message):
-
-    user_id = str(message.from_user.id)
-
-    res = supabase.table("users").select("*").execute()
-    users = res.data or []
-
-    ranking = sorted(users, key=lambda x: x.get("invites", 0), reverse=True)
-
-    text = "🏆 Top 5 Inviter\n\n"
-
-    for i, u in enumerate(ranking[:5], start=1):
-        text += f"{i}. User*** — {u.get('invites',0)}\n"
-
-    my_pos = next((i+1 for i,u in enumerate(ranking) if u["id"] == user_id), 0)
-    my_inv = next((u["invites"] for u in users if u["id"] == user_id), 0)
-
-    text += "\n────────────\n"
-    text += f"Du bist Platz #{my_pos}\n"
-    text += f"Deine Invites: {my_inv}"
-
-    bot.send_message(message.chat.id, text)
-
-# ---------------- INVITES ----------------
-@bot.message_handler(commands=["invites"])
-def invites(message):
-
-    user_id = str(message.from_user.id)
-    user = get_user(user_id)
-
-    invites = user.get("invite_list") or []
-
-    if not invites:
-        bot.send_message(message.chat.id, "Keine Invites vorhanden.")
-        return
-
-    text = "👥 Deine Invites\n\n"
-
-    for i, inv in enumerate(invites, start=1):
-        name = inv["username"]
-        if name != "unknown":
-            name = "@" + name
-        text += f"{i}. {name} — {inv['date']}\n"
-
-    bot.send_message(message.chat.id, text)
-
-# ---------------- SCREENSHOT ----------------
-@bot.message_handler(content_types=['photo'])
-def handle_photo(message):
-
-    if ADMIN_ID == 0:
-        return
-
-    username = message.from_user.username or "unknown"
-    time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-
-    caption = (
-        "📸 SCREENSHOT\n\n"
-        f"👤 User ID: {message.from_user.id}\n"
-        f"🧑 Username: @{username}\n"
-        f"🕒 Zeit: {time}"
-    )
-
-    bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption)
-
-# ---------------- ADMIN ----------------
-@bot.message_handler(commands=["admin_user"])
-def admin_user(message):
-
-    if not is_admin(message.from_user.id):
-        return
-
-    args = message.text.split()
-
-    if len(args) < 2:
-        bot.send_message(message.chat.id, "Nutze: /admin_user ID")
-        return
-
-    uid = args[1]
-
-    res = supabase.table("users").select("*").eq("id", uid).execute()
-
-    if not res.data:
-        bot.send_message(message.chat.id, "User nicht gefunden")
-        return
-
-    u = res.data[0]
-
-    text = (
-        f"👤 USER INFO\n\n"
-        f"ID: {u['id']}\n"
-        f"Invites: {u.get('invites',0)}\n"
-        f"XP: {u.get('xp',0)}\n"
-        f"Level: {u.get('level',1)}\n"
-        f"Ref: {u.get('ref_code','-')}\n"
-    )
-
-    bot.send_message(message.chat.id, text)
 
 # ---------------- CALLBACK ----------------
 CHANNEL = "@Freispielritter"
@@ -270,7 +223,6 @@ def callback(call):
 
         ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
 
-        # ✅ FIX: MINI APP BUTTON WIEDER AKTIV
         web_app = types.WebAppInfo(
             "https://shiny-dolphin-f9ce7d.netlify.app/"
         )
