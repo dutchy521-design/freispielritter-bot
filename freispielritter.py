@@ -99,6 +99,8 @@ def xp_get():
     })
 
 
+# ---------------- FIXED XP UPDATE (WICHTIGSTER PART) ----------------
+
 @app.route("/xp/update", methods=["POST"])
 def xp_update():
 
@@ -109,12 +111,10 @@ def xp_update():
     if not user_id:
         return jsonify({"error": "no id"})
 
-    res = supabase.table("users").select("xp").eq("id", user_id).execute()
+    # IMMER User sicherstellen
+    user = get_user(user_id)
 
-    if not res.data:
-        return jsonify({"error": "user not found"})
-
-    current_xp = int(res.data[0]["xp"] or 0)
+    current_xp = int(user.get("xp") or 0)
     new_xp = current_xp + add_amount
     new_level = (new_xp // 100) + 1
 
