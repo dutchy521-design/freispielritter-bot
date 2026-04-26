@@ -109,15 +109,19 @@ def xp_update():
     if not user_id:
         return jsonify({"error": "no id"})
 
-    user = get_user(user_id)
+    res = supabase.table("users").select("xp").eq("id", user_id).execute()
 
-    new_xp = int(user.get("xp") or 0) + add_amount
+    if not res.data:
+        return jsonify({"error": "user not found"})
+
+    current_xp = int(res.data[0]["xp"] or 0)
+    new_xp = current_xp + add_amount
     new_level = (new_xp // 100) + 1
 
-    update_user(user_id, {
+    supabase.table("users").update({
         "xp": new_xp,
         "level": new_level
-    })
+    }).eq("id", user_id).execute()
 
     return jsonify({"ok": True})
 
