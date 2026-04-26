@@ -99,21 +99,29 @@ def xp_get():
     })
 
 
-# ================== FIXED XP UPDATE ==================
+# ===================== DEBUG XP UPDATE =====================
 
 @app.route("/xp/update", methods=["POST"])
 def xp_update():
 
+    print("🔥 XP UPDATE HIT")
+
     try:
-        data = request.get_json(force=True, silent=True)
+        data = request.get_json(force=True, silent=False)
+        print("📦 RECEIVED DATA:", data)
 
         if not data:
-            return jsonify({"error": "no json"}), 400
+            print("❌ NO DATA RECEIVED")
+            return jsonify({"error": "no data"}), 400
 
         user_id = str(data.get("id"))
         add_amount = int(data.get("xp") or 0)
 
+        print("👤 USER ID:", user_id)
+        print("➕ XP AMOUNT:", add_amount)
+
         if not user_id:
+            print("❌ NO USER ID")
             return jsonify({"error": "no id"}), 400
 
         user = get_user(user_id)
@@ -127,6 +135,8 @@ def xp_update():
             "level": new_level
         }).eq("id", user_id).execute()
 
+        print("✅ SAVED SUCCESSFULLY:", new_xp)
+
         return jsonify({
             "ok": True,
             "xp": new_xp,
@@ -134,7 +144,7 @@ def xp_update():
         })
 
     except Exception as e:
-        print("XP ERROR:", e)
+        print("💥 ERROR IN XP UPDATE:", e)
         return jsonify({"error": str(e)}), 500
 
 
