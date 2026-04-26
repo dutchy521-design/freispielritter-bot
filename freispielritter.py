@@ -34,13 +34,13 @@ def generate_code():
 def get_user(user_id):
     user_id = str(user_id)
 
-    res = supabase.table("users").select("*").eq("id", str(user_id)).execute()
+    res = supabase.table("users").select("*").eq("id", user_id).execute()
 
     if res.data and len(res.data) > 0:
         return res.data[0]
 
     new_user = {
-        "id": str(user_id),
+        "id": user_id,
         "xp": 0,
         "level": 1,
         "invites": 0,
