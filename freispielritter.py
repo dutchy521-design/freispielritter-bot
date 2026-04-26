@@ -62,11 +62,27 @@ def find_user_by_ref(code):
     return None
 
 def is_admin(user_id):
-    return int(user_id) == ADMIN_ID
+    try:
+        return int(user_id) == int(ADMIN_ID)
+    except:
+        return False
 
-# =============================
-# API ROUTES (MINI APP FIX)
-# =============================
+# ---------------- XP SYSTEM ----------------
+def add_xp(user_id, amount=10):
+
+    user = get_user(user_id)
+
+    xp = user.get("xp", 0) + amount
+    level = (xp // 100) + 1
+
+    update_user(user_id, {
+        "xp": xp,
+        "level": level
+    })
+
+    return xp, level
+
+# ---------------- MINI APP API ----------------
 
 @app.route("/xp")
 def get_xp():
@@ -87,21 +103,29 @@ def get_xp():
 @app.route("/xp/update", methods=["POST"])
 def update_xp():
 
-    data = request.json
+    data = request.json or {}
+
     user_id = str(data.get("id"))
+    add_amount = int(data.get("xp", 0))
 
     if not user_id:
         return jsonify({"error": "no id"})
 
-    xp = int(data.get("xp", 0))
-    level = int(data.get("level", 1))
+    user = get_user(user_id)
+
+    new_xp = user.get("xp", 0) + add_amount
+    new_level = (new_xp // 100) + 1
 
     update_user(user_id, {
-        "xp": xp,
-        "level": level
+        "xp": new_xp,
+        "level": new_level
     })
 
-    return jsonify({"ok": True})
+    return jsonify({
+        "ok": True,
+        "xp": new_xp,
+        "level": new_level
+    })
 
 
 @app.route("/ref")
@@ -115,24 +139,9 @@ def get_ref():
     user = get_user(user_id)
 
     return jsonify({
-        "ref_code": user.get("ref_code"),
+        "ref_code": user.get("ref_code", ""),
         "invites": user.get("invites", 0)
     })
-
-# ---------------- XP SYSTEM ----------------
-def add_xp(user_id, amount=10):
-
-    user = get_user(user_id)
-
-    xp = user.get("xp", 0) + amount
-    level = (xp // 100) + 1
-
-    update_user(user_id, {
-        "xp": xp,
-        "level": level
-    })
-
-    return xp, level
 
 # ---------------- START ----------------
 @bot.message_handler(commands=["start"])
@@ -185,57 +194,69 @@ def start(message):
         reply_markup=markup
     )
 
-# ---------------- CALLBACK ----------------
-CHANNEL = "@Freispielritter"
+# ---------------- SCREENSHOT FIX ----------------
+@bot.message_handler(content_types=['photo'])
+def handle_photo(message):
 
-@bot.callback_query_handler(func=lambda call: True)
-def callback(call):
-
-    chat_id = call.message.chat.id
-
-    if call.data == "age_no":
-        bot.send_message(chat_id, "❌ Zugriff verweigert.")
+    if not ADMIN_ID:
         return
 
-    if call.data == "age_yes":
-
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("📢 Kanal beitreten", url="https://t.me/Freispielritter"))
-        markup.add(types.InlineKeyboardButton("✅ Ich bin beigetreten", callback_data="check_channel"))
-
-        bot.send_message(chat_id, "👉 Bitte trete dem Kanal bei:", reply_markup=markup)
+    try:
+        admin = int(ADMIN_ID)
+    except:
         return
 
-    if call.data == "check_channel":
+    if admin == 0:
+        return
 
-        try:
-            member = bot.get_chat_member(CHANNEL, call.from_user.id)
+    username = message.from_user.username or "unknown"
+    time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
 
-            if member.status not in ["member", "administrator", "creator"]:
-                bot.send_message(chat_id, "❌ Bitte zuerst dem Kanal beitreten!")
-                return
+    caption = (
+        "📸 SCREENSHOT\n\n"
+        f"👤 User ID: {message.from_user.id}\n"
+        f"🧑 Username: @{username}\n"
+        f"🕒 Zeit: {time}"
+    )
 
-        except:
-            bot.send_message(chat_id, "❌ Fehler beim Prüfen")
-            return
+    try:
+        bot.send_photo(admin, message.photo[-1].file_id, caption=caption)
+    except Exception as e:
+        print("Screenshot error:", e)
 
-        user = get_user(str(chat_id))
+# ---------------- ADMIN ----------------
+@bot.message_handler(commands=["admin_user"])
+def admin_user(message):
 
-        ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
+    if not is_admin(message.from_user.id):
+        return
 
-        web_app = types.WebAppInfo(
-            "https://shiny-dolphin-f9ce7d.netlify.app/"
-        )
+    args = message.text.split()
 
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add(types.KeyboardButton("🚀 Mini App starten", web_app=web_app))
+    if len(args) < 2:
+        bot.send_message(message.chat.id, "Nutze: /admin_user ID")
+        return
 
-        bot.send_message(
-            chat_id,
-            "✅ Freigeschaltet!\n\n"
-            f"🔗 Dein Ref-Link:\n{ref_link}",
-            reply_markup=markup
-        )
+    uid = args[1]
+
+    res = supabase.table("users").select("*").eq("id", uid).execute()
+
+    if not res.data:
+        bot.send_message(message.chat.id, "User nicht gefunden")
+        return
+
+    u = res.data[0]
+
+    text = (
+        f"👤 USER INFO\n\n"
+        f"ID: {u['id']}\n"
+        f"Invites: {u.get('invites',0)}\n"
+        f"XP: {u.get('xp',0)}\n"
+        f"Level: {u.get('level',1)}\n"
+        f"Ref: {u.get('ref_code','-')}\n"
+    )
+
+    bot.send_message(message.chat.id, text)
 
 # ---------------- WEB ----------------
 def run_web():
@@ -243,7 +264,7 @@ def run_web():
     app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
-    print("Bot läuft mit XP + Mini App Fix 🚀")
+    print("Bot läuft 🚀")
 
     threading.Thread(target=run_web, daemon=True).start()
     bot.infinity_polling(skip_pending=True)
