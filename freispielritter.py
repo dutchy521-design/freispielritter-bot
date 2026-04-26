@@ -34,13 +34,13 @@ def generate_code():
 def get_user(user_id):
     user_id = str(user_id)
 
-    res = supabase.table("users").select("*").eq("id", user_id).execute()
+    res = supabase.table("users").select("*").eq("id", str(user_id)).execute()
 
-    if res.data:
+    if res.data and len(res.data) > 0:
         return res.data[0]
 
     new_user = {
-        "id": user_id,
+        "id": str(user_id),
         "xp": 0,
         "level": 1,
         "invites": 0,
@@ -72,7 +72,7 @@ def add_xp(user_id, amount=10):
 
     user = get_user(user_id)
 
-    xp = user.get("xp", 0) + amount
+    xp = int(user.get("xp") or 0) + amount
     level = (xp // 100) + 1
 
     update_user(user_id, {
@@ -111,7 +111,7 @@ def xp_update():
 
     user = get_user(user_id)
 
-    new_xp = user.get("xp", 0) + add_amount
+    new_xp = int(user.get("xp") or 0) + add_amount
     new_level = (new_xp // 100) + 1
 
     update_user(user_id, {
@@ -183,7 +183,7 @@ def start(message):
 
     bot.send_message(message.chat.id, "🔞 Bist du 18 Jahre oder älter?", reply_markup=markup)
 
-# ---------------- CALLBACK FIX (STABIL + NO DEAD END) ----------------
+# ---------------- CALLBACK ----------------
 CHANNEL = "@Freispielritter"
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -191,12 +191,10 @@ def callback(call):
 
     chat_id = call.message.chat.id
 
-    # 18+ NO
     if call.data == "age_no":
         bot.send_message(chat_id, "❌ Zugriff verweigert.")
         return
 
-    # 18+ YES
     if call.data == "age_yes":
 
         markup = types.InlineKeyboardMarkup()
@@ -212,7 +210,6 @@ def callback(call):
         bot.send_message(chat_id, "👉 Bitte trete dem Kanal bei:", reply_markup=markup)
         return
 
-    # CHANNEL CHECK (FIXED - NO DEAD END)
     if call.data == "check_channel":
 
         try:
@@ -221,7 +218,7 @@ def callback(call):
 
         except Exception as e:
             print("CHANNEL ERROR:", e)
-            bot.send_message(chat_id, "⚠️ Kanalprüfung aktuell nicht möglich. Bitte später erneut klicken.")
+            bot.send_message(chat_id, "⚠️ Kanalprüfung aktuell nicht möglich.")
             return
 
         if status not in ["member", "administrator", "creator"]:
@@ -246,7 +243,7 @@ def callback(call):
             reply_markup=markup
         )
 
-# ---------------- SCREENSHOT (WORKING) ----------------
+# ---------------- SCREENSHOT ----------------
 @bot.message_handler(content_types=['photo'])
 def screenshot(message):
 
