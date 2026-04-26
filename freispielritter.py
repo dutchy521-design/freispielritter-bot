@@ -99,31 +99,43 @@ def xp_get():
     })
 
 
-# ---------------- FIXED XP UPDATE (WICHTIGSTER PART) ----------------
+# ================== FIXED XP UPDATE ==================
 
 @app.route("/xp/update", methods=["POST"])
 def xp_update():
 
-    data = request.json or {}
-    user_id = str(data.get("id"))
-    add_amount = int(data.get("xp", 0))
+    try:
+        data = request.get_json(force=True, silent=True)
 
-    if not user_id:
-        return jsonify({"error": "no id"})
+        if not data:
+            return jsonify({"error": "no json"}), 400
 
-    # IMMER User sicherstellen
-    user = get_user(user_id)
+        user_id = str(data.get("id"))
+        add_amount = int(data.get("xp") or 0)
 
-    current_xp = int(user.get("xp") or 0)
-    new_xp = current_xp + add_amount
-    new_level = (new_xp // 100) + 1
+        if not user_id:
+            return jsonify({"error": "no id"}), 400
 
-    supabase.table("users").update({
-        "xp": new_xp,
-        "level": new_level
-    }).eq("id", user_id).execute()
+        user = get_user(user_id)
 
-    return jsonify({"ok": True})
+        current_xp = int(user.get("xp") or 0)
+        new_xp = current_xp + add_amount
+        new_level = (new_xp // 100) + 1
+
+        supabase.table("users").update({
+            "xp": new_xp,
+            "level": new_level
+        }).eq("id", user_id).execute()
+
+        return jsonify({
+            "ok": True,
+            "xp": new_xp,
+            "level": new_level
+        })
+
+    except Exception as e:
+        print("XP ERROR:", e)
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/ref")
