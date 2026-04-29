@@ -269,6 +269,135 @@ def callback(call):
             reply_markup=markup
         )
 
+# ---------------- ADMIN REF COMMANDS ----------------
+
+@bot.message_handler(commands=["invites"])
+def admin_invites(message):
+
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        user_id = message.text.split()[1]
+    except:
+        bot.reply_to(message, "Usage: /invites USERID")
+        return
+
+    user = get_user(user_id)
+
+    bot.reply_to(
+        message,
+        f"👤 User: {user_id}\n"
+        f"📨 Invites: {user.get('invites',0)}"
+    )
+
+
+@bot.message_handler(commands=["addinvite"])
+def admin_add_invite(message):
+
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        user_id = message.text.split()[1]
+    except:
+        bot.reply_to(message, "Usage: /addinvite USERID")
+        return
+
+    user = get_user(user_id)
+
+    new_inv = int(user.get("invites",0)) + 1
+
+    update_user(user_id,{
+        "invites": new_inv
+    })
+
+    add_xp(user_id,10)
+
+    bot.reply_to(message,f"✅ Invite hinzugefügt\nNeue Invites: {new_inv}")
+
+
+@bot.message_handler(commands=["setinvites"])
+def admin_set_invites(message):
+
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        parts = message.text.split()
+        user_id = parts[1]
+        amount = int(parts[2])
+    except:
+        bot.reply_to(message, "Usage: /setinvites USERID ANZAHL")
+        return
+
+    update_user(user_id,{
+        "invites": amount
+    })
+
+    bot.reply_to(message,f"✅ Invites gesetzt auf {amount}")
+
+
+@bot.message_handler(commands=["resetinvites"])
+def admin_reset_invites(message):
+
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        user_id = message.text.split()[1]
+    except:
+        bot.reply_to(message, "Usage: /resetinvites USERID")
+        return
+
+    update_user(user_id,{
+        "invites": 0,
+        "invite_list": []
+    })
+
+    bot.reply_to(message,"♻️ Invites zurückgesetzt")
+
+
+@bot.message_handler(commands=["ref"])
+def admin_ref(message):
+
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        user_id = message.text.split()[1]
+    except:
+        bot.reply_to(message, "Usage: /ref USERID")
+        return
+
+    user = get_user(user_id)
+
+    bot.reply_to(
+        message,
+        f"🔗 Ref Code: {user.get('ref_code')}\n"
+        f"📨 Invites: {user.get('invites',0)}"
+    )
+
+
+@bot.message_handler(commands=["toprefs"])
+def admin_top_refs(message):
+
+    if not is_admin(message.from_user.id):
+        return
+
+    res = supabase.table("users") \
+        .select("id, invites") \
+        .order("invites", desc=True) \
+        .limit(10) \
+        .execute()
+
+    text = "🏆 TOP REFERRALS\n\n"
+
+    for i,u in enumerate(res.data,1):
+        text += f"{i}. {u['id']} — {u['invites']}\n"
+
+    bot.reply_to(message,text)
+
 # ---------------- SCREENSHOT ----------------
 @bot.message_handler(content_types=['photo'])
 def screenshot(message):
