@@ -32,7 +32,7 @@ app = Flask(__name__)
 def home():
     return "Freispielritter läuft 🚀"
 
-# ---------------- MEMORY (PENDING XP REQUESTS) ----------------
+# ---------------- MEMORY ----------------
 pending_xp_requests = {}
 
 # ---------------- HELPERS ----------------
@@ -203,7 +203,7 @@ def callback(call):
             reply_markup=markup
         )
 
-    # ---------------- ADMIN XP BUTTONS ----------------
+    # ---------------- XP BUTTONS ----------------
 
     if call.data.startswith("xp_yes_"):
 
@@ -224,7 +224,19 @@ def callback(call):
             "level": level
         })
 
+        # Admin Info
         bot.send_message(chat_id, "✅ +5 XP vergeben!")
+
+        # 👉 USER NOTIFICATION (NEU)
+        try:
+            bot.send_message(
+                user_id,
+                "💳 Einzahlung bestätigt!\n\n"
+                "⭐ +5 XP wurden deinem Konto gutgeschrieben."
+            )
+        except:
+            pass
+
         pending_xp_requests.pop(req_id, None)
         return
 
@@ -282,7 +294,7 @@ def xp(message):
         message.chat.id,
         f"⭐ XP: {user.get('xp', 0)}\n"
         f"🏆 Level: {user.get('level', 1)}\n\n"
-        f"📌 1 Invite = 10 XP\n📸 Einzahlung = 5 XP (nach Bestätigung)"
+        f"📌 1 Invite = 10 XP\n📸 Screenshot = 5 XP (nach Bestätigung)"
     )
 
 # ---------------- RUN ----------------
