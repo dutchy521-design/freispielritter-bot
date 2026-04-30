@@ -282,7 +282,7 @@ def xp(message):
         message.chat.id,
         f"⭐ XP: {user.get('xp', 0)}\n"
         f"🏆 Level: {user.get('level', 1)}\n\n"
-        f"📌 1 Invite = 10 XP\n📸 Screenshot = 5 XP (nach Bestätigung)"
+        f"📌 1 Invite = 10 XP\n📸 Einzahlung = 5 XP (nach Bestätigung)"
     )
 
 # ---------------- RUN ----------------
