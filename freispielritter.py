@@ -27,6 +27,7 @@ app = Flask(__name__)
 def home():
     return "Freispielritter läuft 🚀"
 
+
 # ---------------- HELPERS ----------------
 
 def generate_code():
@@ -68,7 +69,7 @@ def find_user_by_ref(code):
     return None
 
 
-# ---------------- XP SYSTEM ----------------
+# ---------------- XP ----------------
 
 def add_xp(user_id, amount=10):
 
@@ -97,45 +98,7 @@ def add_xp(user_id, amount=10):
     return xp, level
 
 
-# ---------------- API ----------------
-
-@app.route("/xp")
-def xp_get():
-    user_id = request.args.get("id")
-    user = get_user(user_id)
-
-    return jsonify({
-        "xp": user.get("xp", 0),
-        "level": user.get("level", 1)
-    })
-
-
-@app.route("/xp/update", methods=["POST"])
-def xp_update():
-    data = request.get_json()
-
-    user_id = str(data.get("id"))
-    action = data.get("action")
-
-    if action == "deal_click":
-        xp, level = add_xp(user_id, 10)
-        return jsonify({"xp": xp, "level": level})
-
-    return jsonify({"error": "invalid"}), 400
-
-
-@app.route("/ref")
-def ref_get():
-    user_id = request.args.get("id")
-    user = get_user(user_id)
-
-    return jsonify({
-        "ref_code": user.get("ref_code", ""),
-        "invites": user.get("invites", 0)
-    })
-
-
-# ---------------- START ----------------
+# ---------------- START FLOW ----------------
 
 @bot.message_handler(commands=["start"])
 def start(message):
@@ -145,6 +108,7 @@ def start(message):
 
     args = message.text.split()
 
+    # ---------------- REF CHECK ----------------
     if len(args) > 1:
         ref_code = args[1]
         ref_user_id = find_user_by_ref(ref_code)
@@ -170,12 +134,11 @@ def start(message):
                     "used_ref": ref_code
                 })
 
+    # ---------------- 18+ CHECK ----------------
     markup = types.InlineKeyboardMarkup()
     markup.add(
-        types.InlineKeyboardButton(
-            "🚀 Mini App starten",
-            web_app=types.WebAppInfo("https://freispielritter.pages.dev/")
-        )
+        types.InlineKeyboardButton("✅ Ja, ich bin 18+", callback_data="age_yes"),
+        types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
     )
 
     bot.send_message(
@@ -187,11 +150,14 @@ def start(message):
 
 # ---------------- CALLBACK ----------------
 
+CHANNEL = "@Freispielritter"
+
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
 
     chat_id = call.message.chat.id
 
+    # ---------------- AGE ----------------
     if call.data == "age_no":
         bot.send_message(chat_id, "❌ Zugriff verweigert.")
         return
@@ -208,7 +174,39 @@ def callback(call):
             web_app=types.WebAppInfo("https://freispielritter.pages.dev/")
         ))
 
-        bot.send_message(chat_id, "👉 Zugriff freigeschaltet", reply_markup=markup)
+        bot.send_message(chat_id, "👉 Bitte trete dem Kanal bei:", reply_markup=markup)
+        return
+
+    # ---------------- CHANNEL CHECK ----------------
+    if call.data == "check_channel":
+
+        try:
+            member = bot.get_chat_member(CHANNEL, call.from_user.id)
+            status = member.status
+        except:
+            bot.send_message(chat_id, "⚠️ Fehler bei Kanalprüfung.")
+            return
+
+        if status not in ["member", "administrator", "creator"]:
+            bot.send_message(chat_id, "❌ Du bist noch nicht im Kanal.")
+            return
+
+        user = get_user(str(chat_id))
+
+        ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
+
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(types.KeyboardButton(
+            "🚀 Mini App starten",
+            web_app=types.WebAppInfo("https://freispielritter.pages.dev/")
+        ))
+
+        bot.send_message(
+            chat_id,
+            "✅ Freigeschaltet!\n\n"
+            f"🔗 Dein Ref-Link:\n{ref_link}",
+            reply_markup=markup
+        )
 
 
 # ---------------- SCREENSHOT ----------------
@@ -218,8 +216,6 @@ def screenshot(message):
 
     if ADMIN_ID == 0:
         return
-
-    admin = ADMIN_ID
 
     username = message.from_user.username or "unknown"
     time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
@@ -231,7 +227,7 @@ def screenshot(message):
         f"🕒 {time}"
     )
 
-    bot.send_photo(admin, message.photo[-1].file_id, caption=caption)
+    bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption)
 
 
 # ---------------- RUN ----------------
