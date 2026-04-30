@@ -36,7 +36,6 @@ def home():
 pending_xp_requests = {}
 
 # ---------------- LEVEL SYSTEM ----------------
-
 def get_level_name(level):
     levels = {
         1: "🪙 Bettler-Ritter",
@@ -53,7 +52,6 @@ def get_level_name(level):
     return levels.get(level, "🏆 Unsterblicher Ritter")
 
 # ---------------- HELPERS ----------------
-
 def generate_code():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
 
@@ -88,7 +86,6 @@ def find_user_by_ref(code):
     return None
 
 # ---------------- XP SYSTEM ----------------
-
 def add_xp(user_id, amount=10):
     user = get_user(user_id)
     now = datetime.utcnow()
@@ -113,8 +110,7 @@ def add_xp(user_id, amount=10):
 
     return xp, level
 
-# ---------------- START (FIXED) ----------------
-
+# ---------------- START ----------------
 @bot.message_handler(commands=["start"])
 def start(message):
 
@@ -131,7 +127,6 @@ def start(message):
     )
 
 # ---------------- CALLBACK ----------------
-
 CHANNEL = "@Freispielritter"
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -190,6 +185,22 @@ def callback(call):
             callback_data="top_deal_request"
         ))
 
+        # DEALS
+        markup.add(types.InlineKeyboardButton(
+            "🥇 Goldzino",
+            url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter&utm_campaign=freispielritter"
+        ))
+
+        markup.add(types.InlineKeyboardButton(
+            "🎁 100 Freispiele ohne Einzahlung",
+            url="https://1f0s0.fit/r/XJTWVH25"
+        ))
+
+        markup.add(types.InlineKeyboardButton(
+            "💰 Telegram Crypto Casino",
+            url="https://t.me/tgcplaybot/?start=UsHEI0AGB"
+        ))
+
         bot.send_message(
             chat_id,
             "✅ Freigeschaltet!\n\n"
@@ -219,7 +230,6 @@ def callback(call):
         return
 
 # ---------------- /XP ----------------
-
 @bot.message_handler(commands=["xp"])
 def xp(message):
 
@@ -233,7 +243,6 @@ def xp(message):
     )
 
 # ---------------- RUN ----------------
-
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
