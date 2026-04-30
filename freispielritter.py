@@ -27,7 +27,6 @@ app = Flask(__name__)
 def home():
     return "Freispielritter läuft 🚀"
 
-
 # ---------------- HELPERS ----------------
 
 def generate_code():
@@ -68,8 +67,7 @@ def find_user_by_ref(code):
         return res.data[0]["id"]
     return None
 
-
-# ---------------- XP ----------------
+# ---------------- XP SYSTEM ----------------
 
 def add_xp(user_id, amount=10):
 
@@ -97,8 +95,7 @@ def add_xp(user_id, amount=10):
 
     return xp, level
 
-
-# ---------------- START FLOW ----------------
+# ---------------- START ----------------
 
 @bot.message_handler(commands=["start"])
 def start(message):
@@ -108,7 +105,7 @@ def start(message):
 
     args = message.text.split()
 
-    # ---------------- REF CHECK ----------------
+    # REF HANDLING
     if len(args) > 1:
         ref_code = args[1]
         ref_user_id = find_user_by_ref(ref_code)
@@ -134,7 +131,7 @@ def start(message):
                     "used_ref": ref_code
                 })
 
-    # ---------------- 18+ CHECK ----------------
+    # 18+ CHECK
     markup = types.InlineKeyboardMarkup()
     markup.add(
         types.InlineKeyboardButton("✅ Ja, ich bin 18+", callback_data="age_yes"),
@@ -147,8 +144,7 @@ def start(message):
         reply_markup=markup
     )
 
-
-# ---------------- CALLBACK ----------------
+# ---------------- CALLBACK FLOW FIX ----------------
 
 CHANNEL = "@Freispielritter"
 
@@ -157,11 +153,12 @@ def callback(call):
 
     chat_id = call.message.chat.id
 
-    # ---------------- AGE ----------------
+    # AGE NO
     if call.data == "age_no":
         bot.send_message(chat_id, "❌ Zugriff verweigert.")
         return
 
+    # AGE YES → CHANNEL STEP
     if call.data == "age_yes":
 
         markup = types.InlineKeyboardMarkup()
@@ -170,33 +167,34 @@ def callback(call):
             url="https://t.me/Freispielritter"
         ))
         markup.add(types.InlineKeyboardButton(
-            "🚀 Mini App starten",
-            web_app=types.WebAppInfo("https://freispielritter.pages.dev/")
+            "✅ Ich bin beigetreten",
+            callback_data="check_channel"
         ))
 
         bot.send_message(chat_id, "👉 Bitte trete dem Kanal bei:", reply_markup=markup)
         return
 
-    # ---------------- CHANNEL CHECK ----------------
+    # CHECK CHANNEL → UNLOCK
     if call.data == "check_channel":
 
         try:
             member = bot.get_chat_member(CHANNEL, call.from_user.id)
             status = member.status
         except:
-            bot.send_message(chat_id, "⚠️ Fehler bei Kanalprüfung.")
+            bot.send_message(chat_id, "⚠️ Kanalprüfung fehlgeschlagen.")
             return
 
         if status not in ["member", "administrator", "creator"]:
             bot.send_message(chat_id, "❌ Du bist noch nicht im Kanal.")
             return
 
+        # USER + REF
         user = get_user(str(chat_id))
-
         ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
 
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add(types.KeyboardButton(
+        # FINAL SCREEN
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton(
             "🚀 Mini App starten",
             web_app=types.WebAppInfo("https://freispielritter.pages.dev/")
         ))
@@ -208,8 +206,7 @@ def callback(call):
             reply_markup=markup
         )
 
-
-# ---------------- SCREENSHOT ----------------
+# ---------------- SCREENSHOT (UNCHANGED) ----------------
 
 @bot.message_handler(content_types=['photo'])
 def screenshot(message):
@@ -229,13 +226,11 @@ def screenshot(message):
 
     bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption)
 
-
 # ---------------- RUN ----------------
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
-
 
 if __name__ == "__main__":
     print("Bot läuft stabil 🚀")
