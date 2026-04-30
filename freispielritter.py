@@ -53,7 +53,6 @@ def get_user(user_id):
     }
 
     supabase.table("users").upsert(new_user).execute()
-
     return new_user
 
 
@@ -75,14 +74,13 @@ def is_admin(user_id):
     except:
         return False
 
-
 # ---------------- XP SYSTEM ----------------
 
 def add_xp(user_id, amount=10):
 
     user = get_user(user_id)
-
     now = datetime.utcnow()
+
     last = user.get("last_xp")
 
     if last:
@@ -104,11 +102,11 @@ def add_xp(user_id, amount=10):
 
     return xp, level
 
-
 # ---------------- MINI APP API ----------------
 
 @app.route("/xp")
 def xp_get():
+
     user_id = request.args.get("id")
     if not user_id:
         return jsonify({"error": "no id"})
@@ -123,9 +121,9 @@ def xp_get():
 
 @app.route("/xp/update", methods=["POST"])
 def xp_update():
+
     try:
         data = request.get_json()
-
         if not data:
             return jsonify({"error": "no data"}), 400
 
@@ -150,6 +148,7 @@ def xp_update():
 
 @app.route("/ref")
 def ref_get():
+
     user_id = request.args.get("id")
     if not user_id:
         return jsonify({"error": "no id"})
@@ -160,7 +159,6 @@ def ref_get():
         "ref_code": user.get("ref_code", ""),
         "invites": user.get("invites", 0)
     })
-
 
 # ---------------- START ----------------
 
@@ -204,12 +202,17 @@ def start(message):
 
     markup = types.InlineKeyboardMarkup()
     markup.add(
-        types.InlineKeyboardButton("✅ Ja, ich bin 18+", callback_data="age_yes"),
-        types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
+        types.InlineKeyboardButton(
+            "🚀 Mini App starten",
+            web_app=types.WebAppInfo("https://freispielritter.pages.dev/")
+        )
     )
 
-    bot.send_message(message.chat.id, "🔞 Bist du 18 Jahre oder älter?", reply_markup=markup)
-
+    bot.send_message(
+        message.chat.id,
+        "🔞 Bist du 18 Jahre oder älter?",
+        reply_markup=markup
+    )
 
 # ---------------- CALLBACK ----------------
 
@@ -232,87 +235,18 @@ def callback(call):
             url="https://t.me/Freispielritter"
         ))
         markup.add(types.InlineKeyboardButton(
-            "✅ Ich bin beigetreten",
-            callback_data="check_channel"
-        ))
-
-        bot.send_message(chat_id, "👉 Bitte trete dem Kanal bei:", reply_markup=markup)
-        return
-
-    if call.data == "check_channel":
-
-        try:
-            member = bot.get_chat_member(CHANNEL, call.from_user.id)
-            status = member.status
-        except Exception as e:
-            print("CHANNEL ERROR:", e)
-            bot.send_message(chat_id, "⚠️ Kanalprüfung aktuell nicht möglich.")
-            return
-
-        if status not in ["member", "administrator", "creator"]:
-            bot.send_message(chat_id, "❌ Du bist noch nicht im Kanal.")
-            return
-
-        user = get_user(str(chat_id))
-        ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
-
-        web_app = types.WebAppInfo("https://freispielritter.pages.dev/")
-
-        # 🔥 FIX: INLINE BUTTON statt ReplyKeyboard
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton(
             "🚀 Mini App starten",
-            web_app=web_app
+            web_app=types.WebAppInfo("https://freispielritter.pages.dev/")
         ))
 
-        bot.send_message(
-            chat_id,
-            "✅ Freigeschaltet!\n\n"
-            f"🔗 Dein Ref-Link:\n{ref_link}",
-            reply_markup=markup
-        )
-
-
-# ---------------- SCREENSHOT ----------------
-
-@bot.message_handler(content_types=['photo'])
-def screenshot(message):
-
-    if ADMIN_ID == 0:
+        bot.send_message(chat_id, "👉 Zugriff freigeschaltet", reply_markup=markup)
         return
 
-    try:
-        admin = int(ADMIN_ID)
-    except:
-        return
-
-    username = message.from_user.username or "unknown"
-    time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-
-    user_text = message.caption if message.caption else "❌ Kein Text angegeben"
-
-    caption = (
-        "📸 SCREENSHOT\n\n"
-        f"👤 User ID: {message.from_user.id}\n"
-        f"🧑 Username: @{username}\n"
-        f"🕒 Zeit: {time}\n\n"
-        f"💬 Nachricht:\n{user_text}"
-    )
-
-    try:
-        bot.send_photo(admin, message.photo[-1].file_id, caption=caption)
-    except Exception as e:
-        print("Screenshot error:", e)
-
-
-# ---------------- WEB SERVER ----------------
+# ---------------- SERVER ----------------
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
-
-
-# ---------------- START ----------------
 
 if __name__ == "__main__":
     print("Bot läuft stabil 🚀")
