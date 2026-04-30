@@ -413,11 +413,14 @@ def screenshot(message):
     username = message.from_user.username or "unknown"
     time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
 
+    user_text = message.caption if message.caption else "❌ Kein Text angegeben"
+
     caption = (
         "📸 SCREENSHOT\n\n"
         f"👤 User ID: {message.from_user.id}\n"
         f"🧑 Username: @{username}\n"
-        f"🕒 Zeit: {time}"
+        f"🕒 Zeit: {time}\n\n"
+        f"💬 Nachricht:\n{user_text}"
     )
 
     try:
