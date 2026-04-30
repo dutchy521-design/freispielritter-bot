@@ -3,7 +3,7 @@ import os
 import random
 import string
 from telebot import types
-from flask import Flask, request, jsonify
+from flask import Flask
 import threading
 from datetime import datetime, timedelta
 from supabase import create_client, Client
@@ -31,6 +31,9 @@ app = Flask(__name__)
 @app.route("/")
 def home():
     return "Freispielritter läuft 🚀"
+
+# ---------------- MEMORY (PENDING XP REQUESTS) ----------------
+pending_xp_requests = {}
 
 # ---------------- HELPERS ----------------
 
@@ -200,6 +203,39 @@ def callback(call):
             reply_markup=markup
         )
 
+    # ---------------- ADMIN XP BUTTONS ----------------
+
+    if call.data.startswith("xp_yes_"):
+
+        req_id = call.data.split("_")[2]
+        data = pending_xp_requests.get(req_id)
+
+        if not data:
+            return
+
+        user_id = data["user_id"]
+
+        user = get_user(user_id)
+        xp = int(user.get("xp", 0)) + 5
+        level = (xp // 100) + 1
+
+        update_user(user_id, {
+            "xp": xp,
+            "level": level
+        })
+
+        bot.send_message(chat_id, "✅ +5 XP vergeben!")
+        pending_xp_requests.pop(req_id, None)
+        return
+
+    if call.data.startswith("xp_no_"):
+
+        req_id = call.data.split("_")[2]
+        pending_xp_requests.pop(req_id, None)
+
+        bot.send_message(chat_id, "❌ Abgelehnt.")
+        return
+
 # ---------------- SCREENSHOT ----------------
 
 @bot.message_handler(content_types=['photo'])
@@ -209,21 +245,33 @@ def screenshot(message):
         return
 
     username = message.from_user.username or "unknown"
-    time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-
     note = message.caption if message.caption else "Keine Notiz"
 
-    caption = (
-        f"📸 SCREENSHOT\n\n"
-        f"👤 User ID: {message.from_user.id}\n"
-        f"🧑 @{username}\n"
-        f"🕒 {time}\n\n"
-        f"💬 Notiz:\n{note}"
+    req_id = str(message.message_id)
+
+    pending_xp_requests[req_id] = {
+        "user_id": str(message.from_user.id)
+    }
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("✅ +5 XP geben", callback_data=f"xp_yes_{req_id}"),
+        types.InlineKeyboardButton("❌ Ablehnen", callback_data=f"xp_no_{req_id}")
     )
 
-    bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption)
+    bot.send_photo(
+        ADMIN_ID,
+        message.photo[-1].file_id,
+        caption=(
+            f"📸 SCREENSHOT\n\n"
+            f"👤 User ID: {message.from_user.id}\n"
+            f"🧑 @{username}\n\n"
+            f"💬 Notiz:\n{note}"
+        ),
+        reply_markup=markup
+    )
 
-# ---------------- /XP COMMAND ----------------
+# ---------------- /XP ----------------
 
 @bot.message_handler(commands=["xp"])
 def xp(message):
@@ -232,10 +280,9 @@ def xp(message):
 
     bot.send_message(
         message.chat.id,
-        f"⭐ Deine Stats:\n\n"
-        f"XP: {user.get('xp', 0)}\n"
-        f"Level: {user.get('level', 1)}\n\n"
-        f"📌 Info: 1 Invite = 10 XP"
+        f"⭐ XP: {user.get('xp', 0)}\n"
+        f"🏆 Level: {user.get('level', 1)}\n\n"
+        f"📌 1 Invite = 10 XP\n📸 Screenshot = 5 XP (nach Bestätigung)"
     )
 
 # ---------------- RUN ----------------
@@ -245,6 +292,6 @@ def run_web():
     app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
-    print("Bot läuft stabil 🚀")
+    print("Bot läuft 🚀")
     threading.Thread(target=run_web, daemon=True).start()
     bot.infinity_polling(skip_pending=True)
