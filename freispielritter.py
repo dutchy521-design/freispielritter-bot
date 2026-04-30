@@ -68,12 +68,6 @@ def find_user_by_ref(code):
     return None
 
 
-def is_admin(user_id):
-    try:
-        return int(user_id) == int(ADMIN_ID)
-    except:
-        return False
-
 # ---------------- XP SYSTEM ----------------
 
 def add_xp(user_id, amount=10):
@@ -102,15 +96,12 @@ def add_xp(user_id, amount=10):
 
     return xp, level
 
-# ---------------- MINI APP API ----------------
+
+# ---------------- API ----------------
 
 @app.route("/xp")
 def xp_get():
-
     user_id = request.args.get("id")
-    if not user_id:
-        return jsonify({"error": "no id"})
-
     user = get_user(user_id)
 
     return jsonify({
@@ -121,44 +112,28 @@ def xp_get():
 
 @app.route("/xp/update", methods=["POST"])
 def xp_update():
+    data = request.get_json()
 
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "no data"}), 400
+    user_id = str(data.get("id"))
+    action = data.get("action")
 
-        user_id = str(data.get("id")).strip()
-        action = data.get("action")
-
-        if not user_id or action != "deal_click":
-            return jsonify({"error": "invalid request"}), 400
-
+    if action == "deal_click":
         xp, level = add_xp(user_id, 10)
+        return jsonify({"xp": xp, "level": level})
 
-        return jsonify({
-            "ok": True,
-            "xp": xp,
-            "level": level
-        })
-
-    except Exception as e:
-        print("XP ERROR:", e)
-        return jsonify({"error": str(e)}), 500
+    return jsonify({"error": "invalid"}), 400
 
 
 @app.route("/ref")
 def ref_get():
-
     user_id = request.args.get("id")
-    if not user_id:
-        return jsonify({"error": "no id"})
-
     user = get_user(user_id)
 
     return jsonify({
         "ref_code": user.get("ref_code", ""),
         "invites": user.get("invites", 0)
     })
+
 
 # ---------------- START ----------------
 
@@ -195,11 +170,6 @@ def start(message):
                     "used_ref": ref_code
                 })
 
-                try:
-                    bot.send_message(ref_user_id, "🎉 Neuer Invite + XP erhalten!")
-                except:
-                    pass
-
     markup = types.InlineKeyboardMarkup()
     markup.add(
         types.InlineKeyboardButton(
@@ -214,9 +184,8 @@ def start(message):
         reply_markup=markup
     )
 
-# ---------------- CALLBACK ----------------
 
-CHANNEL = "@Freispielritter"
+# ---------------- CALLBACK ----------------
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
@@ -240,13 +209,37 @@ def callback(call):
         ))
 
         bot.send_message(chat_id, "👉 Zugriff freigeschaltet", reply_markup=markup)
+
+
+# ---------------- SCREENSHOT ----------------
+
+@bot.message_handler(content_types=['photo'])
+def screenshot(message):
+
+    if ADMIN_ID == 0:
         return
 
-# ---------------- SERVER ----------------
+    admin = ADMIN_ID
+
+    username = message.from_user.username or "unknown"
+    time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+
+    caption = (
+        f"📸 SCREENSHOT\n\n"
+        f"👤 User ID: {message.from_user.id}\n"
+        f"🧑 @{username}\n"
+        f"🕒 {time}"
+    )
+
+    bot.send_photo(admin, message.photo[-1].file_id, caption=caption)
+
+
+# ---------------- RUN ----------------
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
+
 
 if __name__ == "__main__":
     print("Bot läuft stabil 🚀")
