@@ -95,7 +95,7 @@ def add_xp(user_id, amount=10):
 
     return xp, level
 
-# ---------------- START ----------------
+# ---------------- START FLOW ----------------
 
 @bot.message_handler(commands=["start"])
 def start(message):
@@ -105,7 +105,7 @@ def start(message):
 
     args = message.text.split()
 
-    # REF HANDLING
+    # REF
     if len(args) > 1:
         ref_code = args[1]
         ref_user_id = find_user_by_ref(ref_code)
@@ -144,7 +144,7 @@ def start(message):
         reply_markup=markup
     )
 
-# ---------------- CALLBACK FLOW FIX ----------------
+# ---------------- CALLBACK FLOW ----------------
 
 CHANNEL = "@Freispielritter"
 
@@ -153,12 +153,10 @@ def callback(call):
 
     chat_id = call.message.chat.id
 
-    # AGE NO
     if call.data == "age_no":
         bot.send_message(chat_id, "❌ Zugriff verweigert.")
         return
 
-    # AGE YES → CHANNEL STEP
     if call.data == "age_yes":
 
         markup = types.InlineKeyboardMarkup()
@@ -174,7 +172,6 @@ def callback(call):
         bot.send_message(chat_id, "👉 Bitte trete dem Kanal bei:", reply_markup=markup)
         return
 
-    # CHECK CHANNEL → UNLOCK
     if call.data == "check_channel":
 
         try:
@@ -188,11 +185,9 @@ def callback(call):
             bot.send_message(chat_id, "❌ Du bist noch nicht im Kanal.")
             return
 
-        # USER + REF
         user = get_user(str(chat_id))
         ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
 
-        # FINAL SCREEN
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton(
             "🚀 Mini App starten",
@@ -206,7 +201,7 @@ def callback(call):
             reply_markup=markup
         )
 
-# ---------------- SCREENSHOT (UNCHANGED) ----------------
+# ---------------- SCREENSHOT (MIT NOTIZ FIX) ----------------
 
 @bot.message_handler(content_types=['photo'])
 def screenshot(message):
@@ -217,14 +212,22 @@ def screenshot(message):
     username = message.from_user.username or "unknown"
     time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
 
+    # 👉 NOTIZ AUS CAPTION
+    note = message.caption if message.caption else "❌ Keine Notiz angegeben"
+
     caption = (
         f"📸 SCREENSHOT\n\n"
         f"👤 User ID: {message.from_user.id}\n"
         f"🧑 @{username}\n"
-        f"🕒 {time}"
+        f"🕒 {time}\n\n"
+        f"💬 Notiz:\n{note}"
     )
 
-    bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption)
+    bot.send_photo(
+        ADMIN_ID,
+        message.photo[-1].file_id,
+        caption=caption
+    )
 
 # ---------------- RUN ----------------
 
