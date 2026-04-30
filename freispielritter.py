@@ -16,7 +16,13 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ---------------- ENV ----------------
 TOKEN = os.getenv("TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID") or 0)
+
+# ⚠️ WICHTIG: DEBUG für Fehlerfindung
+ADMIN_ID = os.getenv("ADMIN_ID")
+try:
+    ADMIN_ID = int(ADMIN_ID)
+except:
+    ADMIN_ID = 0
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -95,7 +101,7 @@ def add_xp(user_id, amount=10):
 
     return xp, level
 
-# ---------------- START FLOW ----------------
+# ---------------- START ----------------
 
 @bot.message_handler(commands=["start"])
 def start(message):
@@ -105,7 +111,7 @@ def start(message):
 
     args = message.text.split()
 
-    # REF
+    # REF SYSTEM
     if len(args) > 1:
         ref_code = args[1]
         ref_user_id = find_user_by_ref(ref_code)
@@ -144,7 +150,7 @@ def start(message):
         reply_markup=markup
     )
 
-# ---------------- CALLBACK FLOW ----------------
+# ---------------- CALLBACK ----------------
 
 CHANNEL = "@Freispielritter"
 
@@ -177,7 +183,8 @@ def callback(call):
         try:
             member = bot.get_chat_member(CHANNEL, call.from_user.id)
             status = member.status
-        except:
+        except Exception as e:
+            print("CHANNEL ERROR:", e)
             bot.send_message(chat_id, "⚠️ Kanalprüfung fehlgeschlagen.")
             return
 
@@ -201,18 +208,20 @@ def callback(call):
             reply_markup=markup
         )
 
-# ---------------- SCREENSHOT (MIT NOTIZ FIX) ----------------
+# ---------------- SCREENSHOT (FIXED + DEBUG) ----------------
 
 @bot.message_handler(content_types=['photo'])
 def screenshot(message):
 
-    if ADMIN_ID == 0:
+    print("📸 Screenshot empfangen")
+
+    if not ADMIN_ID or ADMIN_ID == 0:
+        print("❌ ADMIN_ID fehlt oder ist 0")
         return
 
     username = message.from_user.username or "unknown"
     time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
 
-    # 👉 NOTIZ AUS CAPTION
     note = message.caption if message.caption else "❌ Keine Notiz angegeben"
 
     caption = (
@@ -223,11 +232,16 @@ def screenshot(message):
         f"💬 Notiz:\n{note}"
     )
 
-    bot.send_photo(
-        ADMIN_ID,
-        message.photo[-1].file_id,
-        caption=caption
-    )
+    try:
+        bot.send_photo(
+            ADMIN_ID,
+            message.photo[-1].file_id,
+            caption=caption
+        )
+        print("✅ Screenshot gesendet")
+
+    except Exception as e:
+        print("❌ Screenshot ERROR:", e)
 
 # ---------------- RUN ----------------
 
@@ -237,6 +251,7 @@ def run_web():
 
 if __name__ == "__main__":
     print("Bot läuft stabil 🚀")
+    print("ADMIN_ID =", ADMIN_ID)
 
     threading.Thread(target=run_web, daemon=True).start()
     bot.infinity_polling(skip_pending=True)
