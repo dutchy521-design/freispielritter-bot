@@ -35,6 +35,25 @@ def home():
 # ---------------- MEMORY ----------------
 pending_xp_requests = {}
 
+# ---------------- LEVEL SYSTEM (NEW) ----------------
+
+def get_level_name(level):
+
+    levels = {
+        1: "🪙 Bettler-Ritter",
+        2: "🛡️ Schank-Ritter",
+        3: "⚔️ Eisen-Ritter",
+        4: "🐎 Turnier-Ritter",
+        5: "🏰 Burg-Ritter",
+        6: "👑 Casino-Champion",
+        7: "💎 Royal High Roller",
+        8: "🔥 Shadow Knight",
+        9: "⚡ Mythic Dealer",
+        10: "🏆 Legend of the Casino"
+    }
+
+    return levels.get(level, "🏆 Unsterblicher Ritter")
+
 # ---------------- HELPERS ----------------
 
 def generate_code():
@@ -203,51 +222,6 @@ def callback(call):
             reply_markup=markup
         )
 
-    # ---------------- XP BUTTONS ----------------
-
-    if call.data.startswith("xp_yes_"):
-
-        req_id = call.data.split("_")[2]
-        data = pending_xp_requests.get(req_id)
-
-        if not data:
-            return
-
-        user_id = data["user_id"]
-
-        user = get_user(user_id)
-        xp = int(user.get("xp", 0)) + 5
-        level = (xp // 100) + 1
-
-        update_user(user_id, {
-            "xp": xp,
-            "level": level
-        })
-
-        # Admin Info
-        bot.send_message(chat_id, "✅ +5 XP vergeben!")
-
-        # 👉 USER NOTIFICATION (NEU)
-        try:
-            bot.send_message(
-                user_id,
-                "💳 Einzahlung bestätigt!\n\n"
-                "⭐ +5 XP wurden deinem Konto gutgeschrieben."
-            )
-        except:
-            pass
-
-        pending_xp_requests.pop(req_id, None)
-        return
-
-    if call.data.startswith("xp_no_"):
-
-        req_id = call.data.split("_")[2]
-        pending_xp_requests.pop(req_id, None)
-
-        bot.send_message(chat_id, "❌ Abgelehnt.")
-        return
-
 # ---------------- SCREENSHOT ----------------
 
 @bot.message_handler(content_types=['photo'])
@@ -283,6 +257,50 @@ def screenshot(message):
         reply_markup=markup
     )
 
+# ---------------- XP CALLBACKS ----------------
+
+    if call.data.startswith("xp_yes_"):
+
+        req_id = call.data.split("_")[2]
+        data = pending_xp_requests.get(req_id)
+
+        if not data:
+            return
+
+        user_id = data["user_id"]
+
+        user = get_user(user_id)
+        xp = int(user.get("xp", 0)) + 5
+        level = (xp // 100) + 1
+
+        update_user(user_id, {
+            "xp": xp,
+            "level": level
+        })
+
+        bot.send_message(chat_id, "✅ +5 XP vergeben!")
+
+        # 👉 USER MESSAGE
+        try:
+            bot.send_message(
+                user_id,
+                "💳 Einzahlung bestätigt!\n\n"
+                "⭐ +5 XP wurden deinem Konto gutgeschrieben."
+            )
+        except:
+            pass
+
+        pending_xp_requests.pop(req_id, None)
+        return
+
+    if call.data.startswith("xp_no_"):
+
+        req_id = call.data.split("_")[2]
+        pending_xp_requests.pop(req_id, None)
+
+        bot.send_message(chat_id, "❌ Abgelehnt.")
+        return
+
 # ---------------- /XP ----------------
 
 @bot.message_handler(commands=["xp"])
@@ -293,8 +311,9 @@ def xp(message):
     bot.send_message(
         message.chat.id,
         f"⭐ XP: {user.get('xp', 0)}\n"
-        f"🏆 Level: {user.get('level', 1)}\n\n"
-        f"📌 1 Invite = 10 XP\n📸 Screenshot = 5 XP (nach Bestätigung)"
+        f"🏆 Level: {user.get('level', 1)}\n"
+        f"🎖 Rang: {get_level_name(user.get('level', 1))}\n\n"
+        f"📌 1 Invite = 10 XP\n📸 Screenshot = 5 XP"
     )
 
 # ---------------- RUN ----------------
