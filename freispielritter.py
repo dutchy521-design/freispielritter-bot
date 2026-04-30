@@ -256,7 +256,7 @@ def callback(call):
         ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
 
         web_app = types.WebAppInfo(
-            "https://shiny-dolphin-f9ce7d.netlify.app/"
+            "https://freispielritter.pages.dev/"
         )
 
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
