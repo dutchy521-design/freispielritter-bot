@@ -229,6 +229,107 @@ def callback(call):
         )
         return
 
+    # XP FREIGABE
+    if call.data.startswith("xp_yes_"):
+        req_id = call.data.split("_")[2]
+        data = pending_xp_requests.get(req_id)
+
+        if not data:
+            return
+
+        user_id = data["user_id"]
+
+        user = get_user(user_id)
+        xp = int(user.get("xp", 0)) + 5
+        level = (xp // 100) + 1
+
+        update_user(user_id, {
+            "xp": xp,
+            "level": level
+        })
+
+        bot.send_message(chat_id, "✅ +5 XP vergeben!")
+
+        try:
+            bot.send_message(
+                user_id,
+                "💳 Einzahlung bestätigt!\n\n⭐ +5 XP gutgeschrieben."
+            )
+        except:
+            pass
+
+        pending_xp_requests.pop(req_id, None)
+        return
+
+    if call.data.startswith("xp_no_"):
+        req_id = call.data.split("_")[2]
+        pending_xp_requests.pop(req_id, None)
+        bot.send_message(chat_id, "❌ Abgelehnt.")
+        return
+
+# ---------------- SCREENSHOT ----------------
+@bot.message_handler(content_types=['photo'])
+def screenshot(message):
+
+    if ADMIN_ID == 0:
+        return
+
+    username = message.from_user.username or "unknown"
+    note = message.caption if message.caption else "Keine Notiz"
+
+    # ✅ NOTE SPEICHERN
+    try:
+        supabase.table("notes").insert({
+            "user_id": str(message.from_user.id),
+            "note": note,
+            "date": datetime.now().strftime("%d.%m.%Y %H:%M")
+        }).execute()
+    except:
+        pass
+
+    req_id = str(message.message_id)
+
+    pending_xp_requests[req_id] = {
+        "user_id": str(message.from_user.id)
+    }
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("✅ +5 XP geben", callback_data=f"xp_yes_{req_id}"),
+        types.InlineKeyboardButton("❌ Ablehnen", callback_data=f"xp_no_{req_id}")
+    )
+
+    bot.send_photo(
+        ADMIN_ID,
+        message.photo[-1].file_id,
+        caption=(
+            f"📸 SCREENSHOT\n\n"
+            f"👤 User ID: {message.from_user.id}\n"
+            f"🧑 @{username}\n\n"
+            f"💬 Notiz:\n{note}"
+        ),
+        reply_markup=markup
+    )
+
+# ---------------- /NOTES ----------------
+@bot.message_handler(commands=["notes"])
+def notes(message):
+
+    user_id = str(message.from_user.id)
+
+    res = supabase.table("notes").select("*").eq("user_id", user_id).execute()
+
+    if not res.data:
+        bot.send_message(message.chat.id, "📭 Keine Notizen gefunden.")
+        return
+
+    text = "📊 Deine Einzahlungen:\n\n"
+
+    for entry in res.data:
+        text += f"💰 {entry['note']} ({entry['date']})\n"
+
+    bot.send_message(message.chat.id, text)
+
 # ---------------- /XP ----------------
 @bot.message_handler(commands=["xp"])
 def xp(message):
