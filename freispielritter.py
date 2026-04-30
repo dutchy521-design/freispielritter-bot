@@ -5,7 +5,7 @@ import string
 from telebot import types
 from flask import Flask, request, jsonify
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from supabase import create_client, Client
 
 # ---------------- SUPABASE ----------------
@@ -28,15 +28,17 @@ def home():
     return "Freispielritter läuft 🚀"
 
 # ---------------- HELPERS ----------------
+
 def generate_code():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
 
+
 def get_user(user_id):
-    user_id = str(user_id)
+    user_id = str(user_id).strip()
 
     res = supabase.table("users").select("*").eq("id", user_id).execute()
 
-    if res.data and len(res.data) > 0:
+    if res.data:
         return res.data[0]
 
     new_user = {
@@ -46,14 +48,20 @@ def get_user(user_id):
         "invites": 0,
         "ref_code": generate_code(),
         "used_ref": None,
-        "invite_list": []
+        "invite_list": [],
+        "last_xp": None
     }
 
-    supabase.table("users").insert(new_user).execute()
+    # UPsert = stabiler als insert (verhindert Race Issues)
+    supabase.table("users").upsert(new_user).execute()
+
     return new_user
 
+
 def update_user(user_id, fields: dict):
-    supabase.table("users").update(fields).eq("id", str(user_id)).execute()
+    user_id = str(user_id).strip()
+    supabase.table("users").update(fields).eq("id", user_id).execute()
+
 
 def find_user_by_ref(code):
     res = supabase.table("users").select("id").eq("ref_code", code).execute()
@@ -61,26 +69,44 @@ def find_user_by_ref(code):
         return res.data[0]["id"]
     return None
 
+
 def is_admin(user_id):
     try:
         return int(user_id) == int(ADMIN_ID)
     except:
         return False
 
-# ---------------- XP ----------------
+
+# ---------------- XP SYSTEM (FIXED & SAFE) ----------------
+
 def add_xp(user_id, amount=10):
 
     user = get_user(user_id)
+
+    now = datetime.utcnow()
+
+    last = user.get("last_xp")
+
+    # cooldown 10 sec
+    if last:
+        try:
+            last_time = datetime.fromisoformat(last)
+            if now - last_time < timedelta(seconds=10):
+                return user.get("xp"), user.get("level")
+        except:
+            pass
 
     xp = int(user.get("xp") or 0) + amount
     level = (xp // 100) + 1
 
     update_user(user_id, {
         "xp": xp,
-        "level": level
+        "level": level,
+        "last_xp": now.isoformat()
     })
 
     return xp, level
+
 
 # ---------------- MINI APP API ----------------
 
@@ -99,52 +125,31 @@ def xp_get():
     })
 
 
-# ===================== DEBUG XP UPDATE =====================
-
 @app.route("/xp/update", methods=["POST"])
 def xp_update():
 
-    print("🔥 XP UPDATE HIT")
-
     try:
-        data = request.get_json(force=True, silent=False)
-        print("📦 RECEIVED DATA:", data)
+        data = request.get_json()
 
         if not data:
-            print("❌ NO DATA RECEIVED")
             return jsonify({"error": "no data"}), 400
 
-        user_id = str(data.get("id"))
-        add_amount = int(data.get("xp") or 0)
+        user_id = str(data.get("id")).strip()
+        action = data.get("action")
 
-        print("👤 USER ID:", user_id)
-        print("➕ XP AMOUNT:", add_amount)
+        if not user_id or action != "deal_click":
+            return jsonify({"error": "invalid request"}), 400
 
-        if not user_id:
-            print("❌ NO USER ID")
-            return jsonify({"error": "no id"}), 400
-
-        user = get_user(user_id)
-
-        current_xp = int(user.get("xp") or 0)
-        new_xp = current_xp + add_amount
-        new_level = (new_xp // 100) + 1
-
-        supabase.table("users").update({
-            "xp": new_xp,
-            "level": new_level
-        }).eq("id", user_id).execute()
-
-        print("✅ SAVED SUCCESSFULLY:", new_xp)
+        xp, level = add_xp(user_id, 10)
 
         return jsonify({
             "ok": True,
-            "xp": new_xp,
-            "level": new_level
+            "xp": xp,
+            "level": level
         })
 
     except Exception as e:
-        print("💥 ERROR IN XP UPDATE:", e)
+        print("XP ERROR:", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -162,7 +167,9 @@ def ref_get():
         "invites": user.get("invites", 0)
     })
 
+
 # ---------------- START ----------------
+
 @bot.message_handler(commands=["start"])
 def start(message):
 
@@ -182,7 +189,7 @@ def start(message):
             if not ref_user.get("used_ref"):
 
                 update_user(ref_user_id, {
-                    "invites": ref_user["invites"] + 1,
+                    "invites": int(ref_user.get("invites", 0)) + 1,
                     "invite_list": (ref_user.get("invite_list") or []) + [{
                         "id": user_id,
                         "username": message.from_user.username or "unknown",
@@ -209,7 +216,9 @@ def start(message):
 
     bot.send_message(message.chat.id, "🔞 Bist du 18 Jahre oder älter?", reply_markup=markup)
 
-# ---------------- CALLBACK ----------------
+
+# ---------------- CALLBACK (UNVERÄNDERT) ----------------
+
 CHANNEL = "@Freispielritter"
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -269,136 +278,9 @@ def callback(call):
             reply_markup=markup
         )
 
-# ---------------- ADMIN REF COMMANDS ----------------
 
-@bot.message_handler(commands=["invites"])
-def admin_invites(message):
+# ---------------- SCREENSHOT (UNVERÄNDERT) ----------------
 
-    if not is_admin(message.from_user.id):
-        return
-
-    try:
-        user_id = message.text.split()[1]
-    except:
-        bot.reply_to(message, "Usage: /invites USERID")
-        return
-
-    user = get_user(user_id)
-
-    bot.reply_to(
-        message,
-        f"👤 User: {user_id}\n"
-        f"📨 Invites: {user.get('invites',0)}"
-    )
-
-
-@bot.message_handler(commands=["addinvite"])
-def admin_add_invite(message):
-
-    if not is_admin(message.from_user.id):
-        return
-
-    try:
-        user_id = message.text.split()[1]
-    except:
-        bot.reply_to(message, "Usage: /addinvite USERID")
-        return
-
-    user = get_user(user_id)
-
-    new_inv = int(user.get("invites",0)) + 1
-
-    update_user(user_id,{
-        "invites": new_inv
-    })
-
-    add_xp(user_id,10)
-
-    bot.reply_to(message,f"✅ Invite hinzugefügt\nNeue Invites: {new_inv}")
-
-
-@bot.message_handler(commands=["setinvites"])
-def admin_set_invites(message):
-
-    if not is_admin(message.from_user.id):
-        return
-
-    try:
-        parts = message.text.split()
-        user_id = parts[1]
-        amount = int(parts[2])
-    except:
-        bot.reply_to(message, "Usage: /setinvites USERID ANZAHL")
-        return
-
-    update_user(user_id,{
-        "invites": amount
-    })
-
-    bot.reply_to(message,f"✅ Invites gesetzt auf {amount}")
-
-
-@bot.message_handler(commands=["resetinvites"])
-def admin_reset_invites(message):
-
-    if not is_admin(message.from_user.id):
-        return
-
-    try:
-        user_id = message.text.split()[1]
-    except:
-        bot.reply_to(message, "Usage: /resetinvites USERID")
-        return
-
-    update_user(user_id,{
-        "invites": 0,
-        "invite_list": []
-    })
-
-    bot.reply_to(message,"♻️ Invites zurückgesetzt")
-
-
-@bot.message_handler(commands=["ref"])
-def admin_ref(message):
-
-    if not is_admin(message.from_user.id):
-        return
-
-    try:
-        user_id = message.text.split()[1]
-    except:
-        bot.reply_to(message, "Usage: /ref USERID")
-        return
-
-    user = get_user(user_id)
-
-    bot.reply_to(
-        message,
-        f"🔗 Ref Code: {user.get('ref_code')}\n"
-        f"📨 Invites: {user.get('invites',0)}"
-    )
-
-
-@bot.message_handler(commands=["toprefs"])
-def admin_top_refs(message):
-
-    if not is_admin(message.from_user.id):
-        return
-
-    res = supabase.table("users") \
-        .select("id, invites") \
-        .order("invites", desc=True) \
-        .limit(10) \
-        .execute()
-
-    text = "🏆 TOP REFERRALS\n\n"
-
-    for i,u in enumerate(res.data,1):
-        text += f"{i}. {u['id']} — {u['invites']}\n"
-
-    bot.reply_to(message,text)
-
-# ---------------- SCREENSHOT ----------------
 @bot.message_handler(content_types=['photo'])
 def screenshot(message):
 
@@ -428,12 +310,16 @@ def screenshot(message):
     except Exception as e:
         print("Screenshot error:", e)
 
+
 # ---------------- WEB SERVER ----------------
+
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
+
 # ---------------- START ----------------
+
 if __name__ == "__main__":
     print("Bot läuft stabil 🚀")
 
