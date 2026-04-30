@@ -17,7 +17,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 # ---------------- ENV ----------------
 TOKEN = os.getenv("TOKEN")
 
-# ⚠️ WICHTIG: DEBUG für Fehlerfindung
 ADMIN_ID = os.getenv("ADMIN_ID")
 try:
     ADMIN_ID = int(ADMIN_ID)
@@ -63,8 +62,7 @@ def get_user(user_id):
 
 
 def update_user(user_id, fields: dict):
-    user_id = str(user_id).strip()
-    supabase.table("users").update(fields).eq("id", user_id).execute()
+    supabase.table("users").update(fields).eq("id", str(user_id)).execute()
 
 
 def find_user_by_ref(code):
@@ -144,13 +142,9 @@ def start(message):
         types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
     )
 
-    bot.send_message(
-        message.chat.id,
-        "🔞 Bist du 18 Jahre oder älter?",
-        reply_markup=markup
-    )
+    bot.send_message(message.chat.id, "🔞 Bist du 18 Jahre oder älter?", reply_markup=markup)
 
-# ---------------- CALLBACK ----------------
+# ---------------- CALLBACK FLOW ----------------
 
 CHANNEL = "@Freispielritter"
 
@@ -183,8 +177,7 @@ def callback(call):
         try:
             member = bot.get_chat_member(CHANNEL, call.from_user.id)
             status = member.status
-        except Exception as e:
-            print("CHANNEL ERROR:", e)
+        except:
             bot.send_message(chat_id, "⚠️ Kanalprüfung fehlgeschlagen.")
             return
 
@@ -208,21 +201,18 @@ def callback(call):
             reply_markup=markup
         )
 
-# ---------------- SCREENSHOT (FIXED + DEBUG) ----------------
+# ---------------- SCREENSHOT ----------------
 
 @bot.message_handler(content_types=['photo'])
 def screenshot(message):
 
-    print("📸 Screenshot empfangen")
-
-    if not ADMIN_ID or ADMIN_ID == 0:
-        print("❌ ADMIN_ID fehlt oder ist 0")
+    if ADMIN_ID == 0:
         return
 
     username = message.from_user.username or "unknown"
     time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
 
-    note = message.caption if message.caption else "❌ Keine Notiz angegeben"
+    note = message.caption if message.caption else "Keine Notiz"
 
     caption = (
         f"📸 SCREENSHOT\n\n"
@@ -232,16 +222,76 @@ def screenshot(message):
         f"💬 Notiz:\n{note}"
     )
 
-    try:
-        bot.send_photo(
-            ADMIN_ID,
-            message.photo[-1].file_id,
-            caption=caption
-        )
-        print("✅ Screenshot gesendet")
+    bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption)
 
-    except Exception as e:
-        print("❌ Screenshot ERROR:", e)
+# ---------------- 👥 /invites ----------------
+
+@bot.message_handler(commands=["invites"])
+def invites(message):
+
+    user = get_user(str(message.from_user.id))
+
+    invite_list = user.get("invite_list") or []
+
+    text = (
+        f"👥 Invites: {user.get('invites', 0)}\n"
+        f"🔗 Code: {user.get('ref_code')}\n\n"
+        f"📜 Letzte Invites:\n"
+    )
+
+    if not invite_list:
+        text += "Keine Invites"
+    else:
+        for i in invite_list[-5:]:
+            text += f"• {i['username']} | {i['date']}\n"
+
+    bot.send_message(message.chat.id, text)
+
+# ---------------- 🏆 /top ----------------
+
+@bot.message_handler(commands=["top"])
+def top(message):
+
+    res = supabase.table("users").select("*").execute()
+    users = res.data or []
+
+    users.sort(key=lambda x: x.get("invites", 0), reverse=True)
+
+    text = "🏆 TOP 5 INVITER:\n\n"
+
+    for i, u in enumerate(users[:5], 1):
+        name = (u.get("invite_list") or [{"username": "user"}])[0]["username"]
+        name = name[:3] + "***"
+
+        text += f"{i}. {name} – {u.get('invites', 0)} Invites\n"
+
+    bot.send_message(message.chat.id, text)
+
+# ---------------- 📊 /rank ----------------
+
+@bot.message_handler(commands=["rank"])
+def rank(message):
+
+    user_id = str(message.from_user.id)
+
+    res = supabase.table("users").select("*").execute()
+    users = res.data or []
+
+    users.sort(key=lambda x: x.get("invites", 0), reverse=True)
+
+    pos = 0
+    invites = 0
+
+    for i, u in enumerate(users, 1):
+        if str(u.get("id")) == user_id:
+            pos = i
+            invites = u.get("invites", 0)
+            break
+
+    bot.send_message(
+        message.chat.id,
+        f"📊 Dein Rank:\n\n🏅 Platz: {pos}\n👥 Invites: {invites}"
+    )
 
 # ---------------- RUN ----------------
 
@@ -251,7 +301,5 @@ def run_web():
 
 if __name__ == "__main__":
     print("Bot läuft stabil 🚀")
-    print("ADMIN_ID =", ADMIN_ID)
-
     threading.Thread(target=run_web, daemon=True).start()
     bot.infinity_polling(skip_pending=True)
