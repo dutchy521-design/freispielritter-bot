@@ -109,7 +109,6 @@ def start(message):
 
     args = message.text.split()
 
-    # REF SYSTEM
     if len(args) > 1:
         ref_code = args[1]
         ref_user_id = find_user_by_ref(ref_code)
@@ -135,7 +134,6 @@ def start(message):
                     "used_ref": ref_code
                 })
 
-    # 18+ CHECK
     markup = types.InlineKeyboardMarkup()
     markup.add(
         types.InlineKeyboardButton("✅ Ja, ich bin 18+", callback_data="age_yes"),
@@ -144,7 +142,7 @@ def start(message):
 
     bot.send_message(message.chat.id, "🔞 Bist du 18 Jahre oder älter?", reply_markup=markup)
 
-# ---------------- CALLBACK FLOW ----------------
+# ---------------- CALLBACK ----------------
 
 CHANNEL = "@Freispielritter"
 
@@ -197,7 +195,8 @@ def callback(call):
         bot.send_message(
             chat_id,
             "✅ Freigeschaltet!\n\n"
-            f"🔗 Dein Ref-Link:\n{ref_link}",
+            f"🔗 Dein Ref-Link:\n{ref_link}\n\n"
+            "⭐ 10 XP pro Invite",
             reply_markup=markup
         )
 
@@ -224,73 +223,19 @@ def screenshot(message):
 
     bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption)
 
-# ---------------- 👥 /invites ----------------
+# ---------------- /XP COMMAND ----------------
 
-@bot.message_handler(commands=["invites"])
-def invites(message):
+@bot.message_handler(commands=["xp"])
+def xp(message):
 
     user = get_user(str(message.from_user.id))
 
-    invite_list = user.get("invite_list") or []
-
-    text = (
-        f"👥 Invites: {user.get('invites', 0)}\n"
-        f"🔗 Code: {user.get('ref_code')}\n\n"
-        f"📜 Letzte Invites:\n"
-    )
-
-    if not invite_list:
-        text += "Keine Invites"
-    else:
-        for i in invite_list[-5:]:
-            text += f"• {i['username']} | {i['date']}\n"
-
-    bot.send_message(message.chat.id, text)
-
-# ---------------- 🏆 /top ----------------
-
-@bot.message_handler(commands=["top"])
-def top(message):
-
-    res = supabase.table("users").select("*").execute()
-    users = res.data or []
-
-    users.sort(key=lambda x: x.get("invites", 0), reverse=True)
-
-    text = "🏆 TOP 5 INVITER:\n\n"
-
-    for i, u in enumerate(users[:5], 1):
-        name = (u.get("invite_list") or [{"username": "user"}])[0]["username"]
-        name = name[:3] + "***"
-
-        text += f"{i}. {name} – {u.get('invites', 0)} Invites\n"
-
-    bot.send_message(message.chat.id, text)
-
-# ---------------- 📊 /rank ----------------
-
-@bot.message_handler(commands=["rank"])
-def rank(message):
-
-    user_id = str(message.from_user.id)
-
-    res = supabase.table("users").select("*").execute()
-    users = res.data or []
-
-    users.sort(key=lambda x: x.get("invites", 0), reverse=True)
-
-    pos = 0
-    invites = 0
-
-    for i, u in enumerate(users, 1):
-        if str(u.get("id")) == user_id:
-            pos = i
-            invites = u.get("invites", 0)
-            break
-
     bot.send_message(
         message.chat.id,
-        f"📊 Dein Rank:\n\n🏅 Platz: {pos}\n👥 Invites: {invites}"
+        f"⭐ Deine Stats:\n\n"
+        f"XP: {user.get('xp', 0)}\n"
+        f"Level: {user.get('level', 1)}\n\n"
+        f"📌 Info: 1 Invite = 10 XP"
     )
 
 # ---------------- RUN ----------------
