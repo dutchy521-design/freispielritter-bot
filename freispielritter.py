@@ -38,7 +38,6 @@ pending_xp_requests = {}
 # ---------------- LEVEL SYSTEM ----------------
 
 def get_level_name(level):
-
     levels = {
         1: "🪙 Bettler-Ritter",
         2: "🛡️ Schank-Ritter",
@@ -51,7 +50,6 @@ def get_level_name(level):
         9: "⚡ Mythic Dealer",
         10: "🏆 Legend of the Casino"
     }
-
     return levels.get(level, "🏆 Unsterblicher Ritter")
 
 # ---------------- HELPERS ----------------
@@ -59,10 +57,8 @@ def get_level_name(level):
 def generate_code():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
 
-
 def get_user(user_id):
     user_id = str(user_id).strip()
-
     res = supabase.table("users").select("*").eq("id", user_id).execute()
 
     if res.data:
@@ -82,10 +78,8 @@ def get_user(user_id):
     supabase.table("users").upsert(new_user).execute()
     return new_user
 
-
 def update_user(user_id, fields: dict):
     supabase.table("users").update(fields).eq("id", str(user_id)).execute()
-
 
 def find_user_by_ref(code):
     res = supabase.table("users").select("id").eq("ref_code", code).execute()
@@ -96,12 +90,10 @@ def find_user_by_ref(code):
 # ---------------- XP SYSTEM ----------------
 
 def add_xp(user_id, amount=10):
-
     user = get_user(user_id)
     now = datetime.utcnow()
 
     last = user.get("last_xp")
-
     if last:
         try:
             last_time = datetime.fromisoformat(last)
@@ -121,62 +113,22 @@ def add_xp(user_id, amount=10):
 
     return xp, level
 
-# ---------------- START ----------------
+# ---------------- START (FIXED) ----------------
 
 @bot.message_handler(commands=["start"])
 def start(message):
 
-    user_id = str(message.from_user.id)
-    user = get_user(user_id)
-
-    args = message.text.split()
-
-    if len(args) > 1:
-        ref_code = args[1]
-        ref_user_id = find_user_by_ref(ref_code)
-
-        if ref_user_id and ref_user_id != user_id:
-
-            ref_user = get_user(ref_user_id)
-
-            if not ref_user.get("used_ref"):
-
-                update_user(ref_user_id, {
-                    "invites": int(ref_user.get("invites", 0)) + 1,
-                    "invite_list": (ref_user.get("invite_list") or []) + [{
-                        "id": user_id,
-                        "username": message.from_user.username or "unknown",
-                        "date": datetime.now().strftime("%d.%m.%Y")
-                    }]
-                })
-
-                add_xp(ref_user_id, 10)
-
-                update_user(user_id, {
-                    "used_ref": ref_code
-                })
-
     markup = types.InlineKeyboardMarkup()
-
-    # 👉 TOP DEAL BUTTON
     markup.add(
-        types.InlineKeyboardButton("🔥 Top Deal 😉", callback_data="top_deal_request")
-    )
-
-    markup.add(
-        types.InlineKeyboardButton("🚀 Mini App starten", web_app=types.WebAppInfo("https://freispielritter.pages.dev/"))
-    )
-
-    markup.add(
-        types.InlineKeyboardButton("📢 Kanal beitreten", url="https://t.me/Freispielritter")
-    )
-
-    markup.add(
-        types.InlineKeyboardButton("✅ Ich bin 18+", callback_data="age_yes"),
+        types.InlineKeyboardButton("✅ Ja, ich bin 18+", callback_data="age_yes"),
         types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
     )
 
-    bot.send_message(message.chat.id, "🔞 Willkommen im Ritter Casino", reply_markup=markup)
+    bot.send_message(
+        message.chat.id,
+        "🔞 Bist du 18 Jahre oder älter?",
+        reply_markup=markup
+    )
 
 # ---------------- CALLBACK ----------------
 
@@ -187,28 +139,7 @@ def callback(call):
 
     chat_id = call.message.chat.id
 
-    # ---------------- TOP DEAL REQUEST ----------------
-    if call.data == "top_deal_request":
-
-        user = call.from_user
-
-        bot.send_message(
-            ADMIN_ID,
-            f"🔥 TOP DEAL ANFRAGE\n\n"
-            f"👤 User: {user.id}\n"
-            f"🧑 @{user.username or 'unknown'}\n\n"
-            f"📩 Anfrage: Top Deal angefordert\n"
-            f"✉️ Bitte manuell per Mail versenden 😉"
-        )
-
-        bot.send_message(
-            chat_id,
-            "🔥 Top Deal angefragt!\n\n"
-            "👀 Der Admin kümmert sich gleich darum 😉"
-        )
-        return
-
-    # ---------------- AGE ----------------
+    # AGE
     if call.data == "age_no":
         bot.send_message(chat_id, "❌ Zugriff verweigert.")
         return
@@ -228,6 +159,7 @@ def callback(call):
         bot.send_message(chat_id, "👉 Bitte trete dem Kanal bei:", reply_markup=markup)
         return
 
+    # CHANNEL CHECK
     if call.data == "check_channel":
 
         try:
@@ -245,94 +177,45 @@ def callback(call):
         ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
 
         markup = types.InlineKeyboardMarkup()
+
+        # MINI APP
         markup.add(types.InlineKeyboardButton(
             "🚀 Mini App starten",
             web_app=types.WebAppInfo("https://freispielritter.pages.dev/")
+        ))
+
+        # TOP DEAL
+        markup.add(types.InlineKeyboardButton(
+            "🔥 Top Deal 😉",
+            callback_data="top_deal_request"
         ))
 
         bot.send_message(
             chat_id,
             "✅ Freigeschaltet!\n\n"
             f"🔗 Dein Ref-Link:\n{ref_link}\n\n"
-            "⭐ 10 XP pro Invite",
+            "👇 Jetzt hast du Zugriff auf App & Deals",
             reply_markup=markup
         )
-
-# ---------------- SCREENSHOT ----------------
-
-@bot.message_handler(content_types=['photo'])
-def screenshot(message):
-
-    if ADMIN_ID == 0:
         return
 
-    username = message.from_user.username or "unknown"
-    note = message.caption if message.caption else "Keine Notiz"
+    # TOP DEAL REQUEST
+    if call.data == "top_deal_request":
 
-    req_id = str(message.message_id)
+        user = call.from_user
 
-    pending_xp_requests[req_id] = {
-        "user_id": str(message.from_user.id)
-    }
+        bot.send_message(
+            ADMIN_ID,
+            f"🔥 TOP DEAL ANFRAGE\n\n"
+            f"👤 User: {user.id}\n"
+            f"🧑 @{user.username or 'unknown'}\n\n"
+            f"✉️ Bitte per Mail versenden 😉"
+        )
 
-    markup = types.InlineKeyboardMarkup()
-    markup.add(
-        types.InlineKeyboardButton("✅ +5 XP geben", callback_data=f"xp_yes_{req_id}"),
-        types.InlineKeyboardButton("❌ Ablehnen", callback_data=f"xp_no_{req_id}")
-    )
-
-    bot.send_photo(
-        ADMIN_ID,
-        message.photo[-1].file_id,
-        caption=(
-            f"📸 SCREENSHOT\n\n"
-            f"👤 User ID: {message.from_user.id}\n"
-            f"🧑 @{username}\n\n"
-            f"💬 Notiz:\n{note}"
-        ),
-        reply_markup=markup
-    )
-
-# ---------------- XP CALLBACK ----------------
-
-    if call.data.startswith("xp_yes_"):
-
-        req_id = call.data.split("_")[2]
-        data = pending_xp_requests.get(req_id)
-
-        if not data:
-            return
-
-        user_id = data["user_id"]
-
-        user = get_user(user_id)
-        xp = int(user.get("xp", 0)) + 5
-        level = (xp // 100) + 1
-
-        update_user(user_id, {
-            "xp": xp,
-            "level": level
-        })
-
-        bot.send_message(chat_id, "✅ +5 XP vergeben!")
-
-        try:
-            bot.send_message(
-                user_id,
-                "💳 Einzahlung bestätigt!\n\n⭐ +5 XP gutgeschrieben."
-            )
-        except:
-            pass
-
-        pending_xp_requests.pop(req_id, None)
-        return
-
-    if call.data.startswith("xp_no_"):
-
-        req_id = call.data.split("_")[2]
-        pending_xp_requests.pop(req_id, None)
-
-        bot.send_message(chat_id, "❌ Abgelehnt.")
+        bot.send_message(
+            chat_id,
+            "🔥 Anfrage gesendet!\n\nDer Admin kümmert sich 😉"
+        )
         return
 
 # ---------------- /XP ----------------
@@ -346,8 +229,7 @@ def xp(message):
         message.chat.id,
         f"⭐ XP: {user.get('xp', 0)}\n"
         f"🏆 Level: {user.get('level', 1)}\n"
-        f"🎖 Rang: {get_level_name(user.get('level', 1))}\n\n"
-        f"📌 1 Invite = 10 XP\n📸 Screenshot = 5 XP"
+        f"🎖 Rang: {get_level_name(user.get('level', 1))}"
     )
 
 # ---------------- RUN ----------------
