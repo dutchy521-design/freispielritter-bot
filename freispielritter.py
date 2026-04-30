@@ -52,7 +52,6 @@ def get_user(user_id):
         "last_xp": None
     }
 
-    # UPsert = stabiler als insert (verhindert Race Issues)
     supabase.table("users").upsert(new_user).execute()
 
     return new_user
@@ -77,17 +76,15 @@ def is_admin(user_id):
         return False
 
 
-# ---------------- XP SYSTEM (FIXED & SAFE) ----------------
+# ---------------- XP SYSTEM ----------------
 
 def add_xp(user_id, amount=10):
 
     user = get_user(user_id)
 
     now = datetime.utcnow()
-
     last = user.get("last_xp")
 
-    # cooldown 10 sec
     if last:
         try:
             last_time = datetime.fromisoformat(last)
@@ -112,7 +109,6 @@ def add_xp(user_id, amount=10):
 
 @app.route("/xp")
 def xp_get():
-
     user_id = request.args.get("id")
     if not user_id:
         return jsonify({"error": "no id"})
@@ -127,7 +123,6 @@ def xp_get():
 
 @app.route("/xp/update", methods=["POST"])
 def xp_update():
-
     try:
         data = request.get_json()
 
@@ -155,7 +150,6 @@ def xp_update():
 
 @app.route("/ref")
 def ref_get():
-
     user_id = request.args.get("id")
     if not user_id:
         return jsonify({"error": "no id"})
@@ -217,7 +211,7 @@ def start(message):
     bot.send_message(message.chat.id, "🔞 Bist du 18 Jahre oder älter?", reply_markup=markup)
 
 
-# ---------------- CALLBACK (UNVERÄNDERT) ----------------
+# ---------------- CALLBACK ----------------
 
 CHANNEL = "@Freispielritter"
 
@@ -250,7 +244,6 @@ def callback(call):
         try:
             member = bot.get_chat_member(CHANNEL, call.from_user.id)
             status = member.status
-
         except Exception as e:
             print("CHANNEL ERROR:", e)
             bot.send_message(chat_id, "⚠️ Kanalprüfung aktuell nicht möglich.")
@@ -261,15 +254,16 @@ def callback(call):
             return
 
         user = get_user(str(chat_id))
-
         ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
 
-        web_app = types.WebAppInfo(
-            "https://freispielritter.pages.dev/"
-        )
+        web_app = types.WebAppInfo("https://freispielritter.pages.dev/")
 
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add(types.KeyboardButton("🚀 Mini App starten", web_app=web_app))
+        # 🔥 FIX: INLINE BUTTON statt ReplyKeyboard
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton(
+            "🚀 Mini App starten",
+            web_app=web_app
+        ))
 
         bot.send_message(
             chat_id,
@@ -279,7 +273,7 @@ def callback(call):
         )
 
 
-# ---------------- SCREENSHOT (UNVERÄNDERT) ----------------
+# ---------------- SCREENSHOT ----------------
 
 @bot.message_handler(content_types=['photo'])
 def screenshot(message):
