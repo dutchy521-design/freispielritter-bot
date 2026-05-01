@@ -12,29 +12,36 @@ import sys
 import traceback
 
 # =========================================================
-# 🔥 GLOBAL DEBUG HOOK (NEU - zeigt echte Crashes)
+# 🔥 HARD BOOT DIAGNOSIS (NEU)
 # =========================================================
 
-def exception_hook(exctype, value, tb):
-    print("🔥 GLOBAL CRASH CAUGHT:")
-    traceback.print_exception(exctype, value, tb)
-
-sys.excepthook = exception_hook
-
-# =========================================================
-# SUPABASE
-# =========================================================
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# =========================================================
-# ENV
-# =========================================================
+print("=== BOOT CHECK START ===")
 
 TOKEN = os.getenv("TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+ADMIN_ID = os.getenv("ADMIN_ID")
+
+print("TOKEN:", "OK" if TOKEN else "MISSING")
+print("SUPABASE_URL:", "OK" if SUPABASE_URL else "MISSING")
+print("SUPABASE_KEY:", "OK" if SUPABASE_KEY else "MISSING")
+print("ADMIN_ID:", ADMIN_ID)
+
+# ❗ HARD STOP wenn was fehlt (verhindert Railway silent completed)
+if not TOKEN or not SUPABASE_URL or not SUPABASE_KEY:
+    print("❌ CRITICAL ENV MISSING -> BOT STOPPED")
+    while True:
+        pass
+
+try:
+    ADMIN_ID = int(ADMIN_ID)
+except:
+    ADMIN_ID = 0
+
+print("✔ ENV OK -> INIT CLIENTS")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -49,14 +56,10 @@ def home():
     return "Bot läuft 🚀"
 
 # =========================================================
-# MEMORY
+# REST BLEIBT 1:1 WIE BEI DIR
 # =========================================================
 
 pending_xp_requests = {}
-
-# =========================================================
-# LEVEL SYSTEM
-# =========================================================
 
 def get_level_name(level):
     levels = {
@@ -72,10 +75,6 @@ def get_level_name(level):
         10: "🏆 Legend of the Casino"
     }
     return levels.get(level, "🏆 Unsterblicher Ritter")
-
-# =========================================================
-# HELPERS
-# =========================================================
 
 def generate_code():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
@@ -110,42 +109,21 @@ def add_xp(user_id, amount):
     level = (xp // 100) + 1
     update_user(user_id, {"xp": xp, "level": level})
 
-# =========================================================
-# FLASK RUN
-# =========================================================
-
 def run():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 # =========================================================
-# TELEGRAM STATE RESET (409 FIX bleibt)
-# =========================================================
-
-def reset_telegram_state():
-    try:
-        bot.stop_polling()
-    except:
-        pass
-
-    try:
-        bot.remove_webhook()
-    except:
-        pass
-
-# =========================================================
-# START BOT (UNVERÄNDERT, nur stabiler)
+# START SAFE (kein silent crash mehr möglich)
 # =========================================================
 
 if __name__ == "__main__":
+    print("BOT PROCESS START")
+
     try:
-        print("BOT STARTING SAFE MODE")
-
-        reset_telegram_state()
-
         threading.Thread(target=run, daemon=True).start()
 
-        print("POLLING STARTED")
+        print("BOT READY (WAITING FOR TELEGRAM)")
 
         bot.infinity_polling(
             skip_pending=True,
@@ -154,6 +132,7 @@ if __name__ == "__main__":
         )
 
     except Exception as e:
-        print("FATAL ERROR:", e)
+        print("FATAL START ERROR:", e)
+        traceback.print_exc()
         while True:
             pass
