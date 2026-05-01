@@ -5,7 +5,7 @@ import string
 from telebot import types
 from flask import Flask
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from supabase import create_client, Client
 
 # ---------------- SUPABASE ----------------
@@ -64,7 +64,9 @@ def get_user(user_id):
         "ref_code": generate_code(),
         "used_ref": None,
         "invite_list": [],
-        "last_xp": None
+        "last_xp": None,
+        "daily_streak": 0,
+        "last_daily": None
     }
 
     supabase.table("users").upsert(new_user).execute()
@@ -82,6 +84,53 @@ def add_xp(user_id, amount):
         "xp": xp,
         "level": level
     })
+
+# ---------------- DAILY (ONLY ADDITION) ----------------
+@bot.message_handler(commands=["daily"])
+def daily(message):
+
+    user = get_user(message.from_user.id)
+
+    now = datetime.now()
+    last = user.get("last_daily")
+    streak = int(user.get("daily_streak") or 0)
+
+    if last:
+        try:
+            last_dt = datetime.strptime(last, "%Y-%m-%d %H:%M:%S")
+
+            # schon heute
+            if now.date() == last_dt.date():
+                bot.send_message(message.chat.id, "⏳ Daily schon abgeholt!")
+                return
+
+            # streak check
+            if now.date() == (last_dt + timedelta(days=1)).date():
+                streak += 1
+            else:
+                streak = 1
+
+        except:
+            streak = 1
+    else:
+        streak = 1
+
+    if streak > 7:
+        streak = 1
+
+    xp_gain = streak
+
+    add_xp(message.from_user.id, xp_gain)
+
+    update_user(message.from_user.id, {
+        "daily_streak": streak,
+        "last_daily": now.strftime("%Y-%m-%d %H:%M:%S")
+    })
+
+    bot.send_message(
+        message.chat.id,
+        f"🎁 Daily abgeholt!\n🔥 Streak: {streak}/7\n⭐ +{xp_gain} XP"
+    )
 
 # ---------------- START ----------------
 @bot.message_handler(commands=["start"])
