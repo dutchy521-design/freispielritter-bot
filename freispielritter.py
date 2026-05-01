@@ -5,7 +5,7 @@ import string
 from telebot import types
 from flask import Flask
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from supabase import create_client, Client
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -23,8 +23,11 @@ app = Flask(__name__)
 def home():
     return "Bot läuft 🚀"
 
+# ---------------- MEMORY ----------------
 pending_xp_requests = {}
+pet_sessions = {}
 
+# ---------------- LEVELS ----------------
 def get_level_name(level):
     levels = {
         1: "🪙 Bettler-Ritter",
@@ -40,9 +43,7 @@ def get_level_name(level):
     }
     return levels.get(level, "🏆 Unsterblicher Ritter")
 
-def generate_code():
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
-
+# ---------------- USER ----------------
 def get_user(user_id):
     user_id = str(user_id)
     res = supabase.table("users").select("*").eq("id", user_id).execute()
@@ -55,270 +56,158 @@ def get_user(user_id):
         "xp": 0,
         "level": 1,
         "invites": 0,
-        "ref_code": generate_code(),
+        "ref_code": ''.join(random.choices(string.ascii_letters + string.digits, k=6)),
         "used_ref": None,
         "invite_list": [],
-        "last_xp": None
+        "last_daily": None
     }
 
     supabase.table("users").upsert(new_user).execute()
     return new_user
 
-def update_user(user_id, fields):
-    supabase.table("users").update(fields).eq("id", str(user_id)).execute()
+def update_user(user_id, data):
+    supabase.table("users").update(data).eq("id", str(user_id)).execute()
 
 def add_xp(user_id, amount):
     user = get_user(user_id)
     xp = int(user.get("xp", 0)) + amount
     level = (xp // 100) + 1
 
-    update_user(user_id, {
-        "xp": xp,
-        "level": level
-    })
+    update_user(user_id, {"xp": xp, "level": level})
 
-@bot.message_handler(commands=["start"])
-def start(message):
-
-    args = message.text.split()
-    ref = args[1] if len(args) > 1 else None
+# ---------------- DAILY BUTTON ----------------
+@bot.message_handler(commands=["daily"])
+def daily(message):
 
     user = get_user(message.from_user.id)
+    last = user.get("last_daily")
 
-    if ref and not user.get("used_ref"):
-        ref_user_id = supabase.table("users").select("id").eq("ref_code", ref).execute()
-
-        if ref_user_id.data:
-            inviter_id = ref_user_id.data[0]["id"]
-
-            if str(inviter_id) != str(message.from_user.id):
-
-                inviter = get_user(inviter_id)
-
-                invite_list = inviter.get("invite_list") or []
-                invite_list.append({
-                    "username": message.from_user.username or "unknown",
-                    "date": datetime.now().strftime("%d.%m.%Y %H:%M")
-                })
-
-                update_user(inviter_id, {
-                    "invites": int(inviter.get("invites", 0)) + 1,
-                    "invite_list": invite_list
-                })
-
-                add_xp(inviter_id, 10)
-
-                update_user(message.from_user.id, {"used_ref": ref})
-
-    markup = types.InlineKeyboardMarkup()
-    markup.row(
-        types.InlineKeyboardButton("✅ Ja", callback_data="age_yes"),
-        types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
-    )
-
-    bot.send_message(
-        message.chat.id,
-        "━━━━━━━━━━━━━━\n🔞 ALTERSPRÜFUNG\n━━━━━━━━━━━━━━\n\nBist du über 18 Jahre alt?",
-        reply_markup=markup
-    )
-
-CHANNEL = "@Freispielritter"
-
-@bot.callback_query_handler(func=lambda call: True)
-def callback(call):
-
-    chat_id = call.message.chat.id
-
-    if call.data == "age_no":
-        bot.send_message(chat_id, "❌ Zugriff verweigert.")
-        return
-
-    if call.data == "age_yes":
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("📢 Zum Kanal", url="https://t.me/Freispielritter"))
-        markup.add(types.InlineKeyboardButton("✅ Ich bin beigetreten", callback_data="check_channel"))
-
-        bot.send_message(
-            chat_id,
-            "━━━━━━━━━━━━━━\n📢 KANAL CHECK\n━━━━━━━━━━━━━━\n\nFolgst du schon unserem Kanal?",
-            reply_markup=markup
-        )
-        return
-
-    if call.data == "check_channel":
+    if last:
         try:
-            member = bot.get_chat_member(CHANNEL, call.from_user.id)
-            if member.status not in ["member", "administrator", "creator"]:
-                bot.send_message(chat_id, "❌ Du bist noch nicht im Kanal.")
+            last_time = datetime.fromisoformat(last)
+            if datetime.utcnow() - last_time < timedelta(hours=24):
+                bot.send_message(message.chat.id, "⏳ Daily Quest noch nicht bereit.")
                 return
         except:
-            bot.send_message(chat_id, "⚠️ Fehler beim Prüfen.")
-            return
-
-        user = get_user(chat_id)
-        ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
-
-        markup = types.InlineKeyboardMarkup()
-        markup.row(
-            types.InlineKeyboardButton("🚀 Mini App", web_app=types.WebAppInfo("https://freispielritter.pages.dev/"))
-        )
-        markup.row(
-            types.InlineKeyboardButton("📦 Deals öffnen", callback_data="open_deals")
-        )
-
-        bot.send_message(
-            chat_id,
-            "━━━━━━━━━━━━━━\n✅ FREIGESCHALTET\n━━━━━━━━━━━━━━\n\n"
-            "🎉 Du bist jetzt drin!\n\n"
-            "🔗 Hier dein persönlicher Einladungslink\n"
-            "um XP und mehr zu verdienen:\n\n"
-            f"{ref_link}",
-            reply_markup=markup
-        )
-        return
-
-    if call.data == "open_deals":
-
-        markup = types.InlineKeyboardMarkup()
-        markup.row(types.InlineKeyboardButton("🔥 Top Deal 😉", callback_data="top_deal"))
-        markup.row(
-            types.InlineKeyboardButton("🥇 Goldzino", url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter&utm_campaign=freispielritter"),
-            types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25")
-        )
-        markup.row(types.InlineKeyboardButton("💰 Crypto Casino", url="https://t.me/tgcplaybot/?start=UsHEI0AGB"))
-
-        bot.send_message(
-            chat_id,
-            "━━━━━━━━━━━━━━\n🎰 DEALS\n━━━━━━━━━━━━━━\n\nWähle deinen Deal:",
-            reply_markup=markup
-        )
-        return
-
-    if call.data == "top_deal":
-        user = call.from_user
-        bot.send_message(
-            ADMIN_ID,
-            f"🔥 TOP DEAL ANFRAGE\n👤 @{user.username or 'unknown'} | ID: {user.id}"
-        )
-        bot.send_message(
-            chat_id,
-            "🔥 Exklusiv!\n\nEin Admin kümmert sich bald um deine Anfrage 😉"
-        )
-        return
-
-    if call.data.startswith("xp_yes_"):
-        req_id = call.data.split("_")[2]
-        data = pending_xp_requests.get(req_id)
-
-        if not data:
-            return
-
-        user_id = data["user_id"]
-        note = data["note"]
-
-        add_xp(user_id, 5)
-
-        supabase.table("notes").insert({
-            "user_id": user_id,
-            "note": note,
-            "date": datetime.now().strftime("%d.%m.%Y %H:%M")
-        }).execute()
-
-        bot.send_message(chat_id, "✅ Bestätigt")
-        bot.send_message(user_id, "💳 Einzahlung bestätigt +5 XP")
-
-        pending_xp_requests.pop(req_id, None)
-        return
-
-    if call.data.startswith("xp_no_"):
-        req_id = call.data.split("_")[2]
-        pending_xp_requests.pop(req_id, None)
-        bot.send_message(chat_id, "❌ Abgelehnt")
-        return
-
-@bot.message_handler(content_types=['photo'])
-def screenshot(message):
-
-    note = message.caption or "Keine Notiz"
-    username = message.from_user.username or "unknown"
-    timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")
-
-    req_id = str(message.message_id)
-
-    pending_xp_requests[req_id] = {
-        "user_id": str(message.from_user.id),
-        "note": note
-    }
+            pass
 
     markup = types.InlineKeyboardMarkup()
-    markup.row(
-        types.InlineKeyboardButton("✅ Bestätigen", callback_data=f"xp_yes_{req_id}"),
-        types.InlineKeyboardButton("❌ Ablehnen", callback_data=f"xp_no_{req_id}")
-    )
-
-    bot.send_photo(
-        ADMIN_ID,
-        message.photo[-1].file_id,
-        caption=f"📸 Screenshot\n👤 @{username}\n🕒 {timestamp}\n\n💬 {note}",
-        reply_markup=markup
-    )
-
-@bot.message_handler(commands=["notes"])
-def notes(message):
-
-    res = supabase.table("notes").select("*").eq("user_id", str(message.from_user.id)).execute()
-
-    if not res.data:
-        bot.send_message(message.chat.id, "📭 Keine Einzahlungen gefunden.")
-        return
-
-    text = "━━━━━━━━━━━━━━\n💰 EINZAHLUNGEN\n━━━━━━━━━━━━━━\n\n"
-
-    for n in res.data:
-        text += f"💸 {n['note']}  🕒 {n['date']}\n"
-
-    bot.send_message(message.chat.id, text)
-
-@bot.message_handler(commands=["ref"])
-def ref(message):
-    user = get_user(message.from_user.id)
-    link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
+    markup.add(types.InlineKeyboardButton("🐾 Quest starten", callback_data="pet_start"))
 
     bot.send_message(
         message.chat.id,
-        "━━━━━━━━━━━━━━\n🔗 DEIN REF-LINK\n━━━━━━━━━━━━━━\n\n"
-        f"{link}\n\n👥 Invites: {user.get('invites',0)}"
+        "━━━━━━━━━━━━━━\n🐾 DAILY QUEST\n━━━━━━━━━━━━━━\n\nStarte dein Haustier-Abenteuer!",
+        reply_markup=markup
     )
 
-@bot.message_handler(commands=["invites"])
-def invites(message):
-    user = get_user(message.from_user.id)
-    lst = user.get("invite_list") or []
+# ---------------- PET SYSTEM ----------------
+PET_TYPES = ["🐶","🐱","🐴","🦊","🐼","🐯","🐸","🐉"]
 
-    if not lst:
-        bot.send_message(message.chat.id, "📭 Keine Invites.")
+@bot.callback_query_handler(func=lambda call: call.data.startswith("pet_"))
+def pet_handler(call):
+
+    uid = str(call.from_user.id)
+
+    # START
+    if call.data == "pet_start":
+
+        markup = types.InlineKeyboardMarkup()
+        for p in PET_TYPES:
+            markup.add(types.InlineKeyboardButton(p, callback_data=f"pet_{p}"))
+
+        bot.send_message(call.message.chat.id, "Wähle dein Tier:", reply_markup=markup)
         return
 
-    text = "━━━━━━━━━━━━━━\n👥 DEINE INVITES\n━━━━━━━━━━━━━━\n\n"
+    # PICK PET
+    if call.data.startswith("pet_") and len(call.data) <= 6:
 
-    for i in lst:
-        text += f"👤 @{i['username']}  🕒 {i['date']}\n"
+        pet = call.data.split("_")[1]
 
-    bot.send_message(message.chat.id, text)
+        pet_sessions[uid] = {
+            "pet": pet,
+            "name": None,
+            "step": 1
+        }
 
-@bot.message_handler(commands=["top"])
-def top(message):
+        bot.send_message(call.message.chat.id, f"Wie soll dein {pet} heißen?")
+        bot.register_next_step_handler(call.message, pet_name)
+        return
 
-    res = supabase.table("users").select("id,invites").order("invites", desc=True).limit(5).execute()
+def pet_name(message):
 
-    text = "━━━━━━━━━━━━━━\n🏆 TOP INVITER\n━━━━━━━━━━━━━━\n\n"
-    for i, u in enumerate(res.data, 1):
-        text += f"{i}. {str(u['id'])[:3]}***  👥 {u['invites']}\n"
+    uid = str(message.from_user.id)
 
-    bot.send_message(message.chat.id, text)
+    if uid not in pet_sessions:
+        return
 
+    pet_sessions[uid]["name"] = message.text
+    pet_sessions[uid]["step"] = 2
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🍖 Füttern", callback_data="pet_feed"))
+    markup.add(types.InlineKeyboardButton("🚶 Spazieren", callback_data="pet_walk"))
+    markup.add(types.InlineKeyboardButton("🎰 Spielen", callback_data="pet_play"))
+
+    bot.send_message(
+        message.chat.id,
+        f"🐾 {message.text} ist bereit!\nWas willst du tun?",
+        reply_markup=markup
+    )
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("pet_"))
+def pet_actions(call):
+
+    uid = str(call.from_user.id)
+
+    if uid not in pet_sessions:
+        return
+
+    pet = pet_sessions[uid]
+
+    name = pet["name"]
+    emoji = pet["pet"]
+
+    if call.data == "pet_feed":
+
+        res = random.choice([
+            f"😋 {name} hat es geliebt!",
+            f"🤢 {name} fand das komisch..."
+        ])
+
+        bot.send_message(call.message.chat.id, f"{emoji} {res}")
+
+    if call.data == "pet_walk":
+
+        res = random.choice([
+            f"🚶 {name} und du gehen ins nächste Casino!",
+            f"😴 {name} hatte keine Lust rauszugehen"
+        ])
+
+        bot.send_message(call.message.chat.id, f"{emoji} {res}")
+
+    if call.data == "pet_play":
+
+        res = random.choice([
+            f"🎰 {name} fühlt sich glücklich am Slotautomaten!",
+            f"🎲 {name} hat Spaß im Casino!"
+        ])
+
+        bot.send_message(call.message.chat.id, f"{emoji} {res}")
+
+    # QUEST FINISH
+    add_xp(uid, 3)
+
+    user = get_user(uid)
+    update_user(uid, {"last_daily": datetime.utcnow().isoformat()})
+
+    bot.send_message(call.message.chat.id, "🎉 Daily Quest abgeschlossen!\n+3 XP")
+
+    pet_sessions.pop(uid, None)
+
+# ---------------- XP COMMAND (UPDATED ONLY DISPLAY) ----------------
 @bot.message_handler(commands=["xp"])
 def xp(message):
+
     user = get_user(message.from_user.id)
 
     bot.send_message(
@@ -329,6 +218,7 @@ def xp(message):
         f"🎖 Rang: {get_level_name(user['level'])}"
     )
 
+# ---------------- RUN ----------------
 def run():
     app.run(host="0.0.0.0", port=8080)
 
