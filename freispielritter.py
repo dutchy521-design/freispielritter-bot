@@ -5,9 +5,10 @@ import string
 from telebot import types
 from flask import Flask
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 from supabase import create_client, Client
 
+# ---------------- SUPABASE ----------------
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -65,8 +66,10 @@ def get_user(user_id):
     supabase.table("users").upsert(new_user).execute()
     return new_user
 
+
 def update_user(user_id, data):
     supabase.table("users").update(data).eq("id", str(user_id)).execute()
+
 
 def add_xp(user_id, amount):
     user = get_user(user_id)
@@ -75,7 +78,22 @@ def add_xp(user_id, amount):
 
     update_user(user_id, {"xp": xp, "level": level})
 
-# ---------------- START (UNCHANGED) ----------------
+
+# ---------------- /XP COMMAND ----------------
+@bot.message_handler(commands=["xp"])
+def xp_cmd(message):
+    user = get_user(message.from_user.id)
+
+    bot.send_message(
+        message.chat.id,
+        f"📊 XP STATUS\n\n"
+        f"XP: {user['xp']}\n"
+        f"Level: {user['level']}\n"
+        f"Rang: {get_level_name(user['level'])}"
+    )
+
+
+# ---------------- START ----------------
 @bot.message_handler(commands=["start"])
 def start(message):
 
@@ -106,7 +124,6 @@ def start(message):
                 })
 
                 add_xp(inviter_id, 10)
-
                 update_user(message.from_user.id, {"used_ref": ref})
 
     markup = types.InlineKeyboardMarkup()
@@ -117,9 +134,11 @@ def start(message):
 
     bot.send_message(message.chat.id, "🔞 Bist du über 18 Jahre alt?", reply_markup=markup)
 
+
 CHANNEL = "@Freispielritter"
 
-# ---------------- SINGLE CALLBACK HANDLER FIX ----------------
+
+# ---------------- CALLBACK ----------------
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
 
@@ -188,7 +207,35 @@ def callback(call):
         bot.send_message(chat_id, "🔥 Anfrage gesendet 😉")
         return
 
-    # ---------------- PET SYSTEM FIXED INSIDE SAME HANDLER ----------------
+    # ---------------- XP SCREENSHOT ----------------
+    if call.data.startswith("xp_yes_"):
+
+        req_id = call.data.split("_")[2]
+
+        if req_id in pending_xp_requests:
+            data = pending_xp_requests[req_id]
+            add_xp(data["user_id"], 20)
+
+            bot.send_message(data["user_id"], "✅ Screenshot bestätigt +20 XP!")
+            bot.send_message(chat_id, "XP vergeben ✔️")
+
+            pending_xp_requests.pop(req_id, None)
+        return
+
+    if call.data.startswith("xp_no_"):
+
+        req_id = call.data.split("_")[2]
+
+        if req_id in pending_xp_requests:
+            data = pending_xp_requests[req_id]
+
+            bot.send_message(data["user_id"], "❌ Screenshot abgelehnt.")
+            bot.send_message(chat_id, "Abgelehnt ❌")
+
+            pending_xp_requests.pop(req_id, None)
+        return
+
+    # ---------------- PET SYSTEM ----------------
     if call.data == "pet_start":
 
         markup = types.InlineKeyboardMarkup()
@@ -209,7 +256,7 @@ def callback(call):
         bot.register_next_step_handler(call.message, pet_name)
         return
 
-    if call.data.startswith("pet_") and call.data in ["pet_feed","pet_walk","pet_play"]:
+    if call.data in ["pet_feed", "pet_walk", "pet_play"]:
 
         uid = str(call.from_user.id)
 
@@ -217,50 +264,47 @@ def callback(call):
             return
 
         pet = pet_sessions[uid]
-        name = pet.get("name","Tier")
-        emoji = pet.get("pet","🐾")
+        name = pet.get("name", "Tier")
+        emoji = pet.get("pet", "🐾")
 
         if call.data == "pet_feed":
             msg = random.choice([f"😋 {name} hat es genossen!", f"🤢 {name} ist nicht begeistert..."])
 
-        if call.data == "pet_walk":
+        elif call.data == "pet_walk":
             msg = random.choice([f"🚶 {name} geht mit dir ins Casino!", f"😴 {name} hat keine Lust..."])
 
-        if call.data == "pet_play":
+        else:
             msg = random.choice([f"🎰 {name} liebt den Slotautomaten!", f"🎲 {name} hat Spaß!"])
 
         add_xp(uid, 3)
 
         bot.send_message(chat_id, f"{emoji} {msg}\n🎉 +3 XP Daily Quest abgeschlossen!")
-
-        pet_sessions.pop(uid, None)
         return
 
-# ---------------- SCREENSHOT (UNCHANGED) ----------------
-@bot.message_handler(content_types=['photo'])
-def screenshot(message):
 
-    note = message.caption or "Keine Notiz"
+# ---------------- PET NAME ----------------
+def pet_name(message):
 
-    req_id = str(message.message_id)
+    uid = str(message.from_user.id)
 
-    pending_xp_requests[req_id] = {
-        "user_id": str(message.from_user.id),
-        "note": note
-    }
+    if uid not in pet_sessions:
+        return
+
+    pet_sessions[uid]["name"] = message.text
 
     markup = types.InlineKeyboardMarkup()
     markup.row(
-        types.InlineKeyboardButton("✅ Bestätigen", callback_data=f"xp_yes_{req_id}"),
-        types.InlineKeyboardButton("❌ Ablehnen", callback_data=f"xp_no_{req_id}")
+        types.InlineKeyboardButton("🍖 Füttern", callback_data="pet_feed"),
+        types.InlineKeyboardButton("🚶 Spazieren", callback_data="pet_walk"),
+        types.InlineKeyboardButton("🎮 Spielen", callback_data="pet_play")
     )
 
-    bot.send_photo(
-        ADMIN_ID,
-        message.photo[-1].file_id,
-        caption=f"👤 @{message.from_user.username}\n💬 {note}",
+    bot.send_message(
+        message.chat.id,
+        f"🐾 Dein Tier heißt jetzt {message.text}",
         reply_markup=markup
     )
+
 
 # ---------------- RUN ----------------
 def run():
