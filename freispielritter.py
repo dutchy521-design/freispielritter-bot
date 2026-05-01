@@ -8,38 +8,34 @@ import threading
 from datetime import datetime
 from supabase import create_client, Client
 import requests
-import sys
 import traceback
 
 # =========================================================
-# 🔥 HARD BOOT DIAGNOSIS (NEU)
+# ENV
 # =========================================================
-
-print("=== BOOT CHECK START ===")
 
 TOKEN = os.getenv("TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-ADMIN_ID = os.getenv("ADMIN_ID")
-
-print("TOKEN:", "OK" if TOKEN else "MISSING")
-print("SUPABASE_URL:", "OK" if SUPABASE_URL else "MISSING")
-print("SUPABASE_KEY:", "OK" if SUPABASE_KEY else "MISSING")
-print("ADMIN_ID:", ADMIN_ID)
-
-# ❗ HARD STOP wenn was fehlt (verhindert Railway silent completed)
-if not TOKEN or not SUPABASE_URL or not SUPABASE_KEY:
-    print("❌ CRITICAL ENV MISSING -> BOT STOPPED")
-    while True:
-        pass
-
 try:
-    ADMIN_ID = int(ADMIN_ID)
+    ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 except:
     ADMIN_ID = 0
 
-print("✔ ENV OK -> INIT CLIENTS")
+print("BOOT CHECK START")
+
+if not TOKEN:
+    print("❌ TOKEN FEHLT")
+    while True:
+        pass
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("❌ SUPABASE FEHLT")
+    while True:
+        pass
+
+print("✔ ENV OK")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -56,10 +52,14 @@ def home():
     return "Bot läuft 🚀"
 
 # =========================================================
-# REST BLEIBT 1:1 WIE BEI DIR
+# MEMORY
 # =========================================================
 
 pending_xp_requests = {}
+
+# =========================================================
+# LEVEL SYSTEM
+# =========================================================
 
 def get_level_name(level):
     levels = {
@@ -75,6 +75,10 @@ def get_level_name(level):
         10: "🏆 Legend of the Casino"
     }
     return levels.get(level, "🏆 Unsterblicher Ritter")
+
+# =========================================================
+# HELPERS
+# =========================================================
 
 def generate_code():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
@@ -109,30 +113,48 @@ def add_xp(user_id, amount):
     level = (xp // 100) + 1
     update_user(user_id, {"xp": xp, "level": level})
 
+# =========================================================
+# FLASK RUN (separat Thread)
+# =========================================================
+
 def run():
     port = int(os.environ.get("PORT", 8080))
+    print("FLASK START")
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 # =========================================================
-# START SAFE (kein silent crash mehr möglich)
+# START DEBUG FIX (WICHTIGSTER TEIL)
 # =========================================================
 
 if __name__ == "__main__":
-    print("BOT PROCESS START")
+    print("=== BOT START SEQUENCE ===")
 
     try:
+        print("STEP 1: Flask starten")
         threading.Thread(target=run, daemon=True).start()
+        print("STEP 2: Flask OK")
 
-        print("BOT READY (WAITING FOR TELEGRAM)")
+        print("STEP 3: Telegram vorbereiten")
+
+        try:
+            bot.remove_webhook()
+            bot.stop_polling()
+        except:
+            pass
+
+        print("STEP 4: Polling Start")
 
         bot.infinity_polling(
             skip_pending=True,
-            timeout=30,
-            long_polling_timeout=30
+            timeout=20,
+            long_polling_timeout=20
         )
+
+        print("STEP 5: Polling aktiv")
 
     except Exception as e:
         print("FATAL START ERROR:", e)
         traceback.print_exc()
+
         while True:
             pass
