@@ -85,9 +85,8 @@ def add_xp(user_id, amount):
         "level": level
     })
 
-# ---------------- DAILY STREAK (FIXED) ----------------
-@bot.message_handler(commands=["daily"])
-def daily(message):
+# ---------------- DAILY CORE LOGIC ----------------
+def handle_daily(message):
     user = get_user(message.from_user.id)
 
     now = datetime.now()
@@ -99,7 +98,6 @@ def daily(message):
             try:
                 last_daily_dt = datetime.strptime(last_daily, "%Y-%m-%d %H:%M:%S")
             except:
-                # Falls falsches Format → reset
                 last_daily_dt = None
 
             if last_daily_dt:
@@ -133,6 +131,16 @@ def daily(message):
         message.chat.id,
         f"🎁 Daily abgeholt!\n🔥 Streak: {streak}/7\n⭐ +{xp_reward} XP"
     )
+
+# ---------------- DAILY HANDLER (COMMAND) ----------------
+@bot.message_handler(commands=["daily"])
+def daily(message):
+    handle_daily(message)
+
+# 🔥 FALLBACK falls Telegram Command nicht triggert
+@bot.message_handler(func=lambda message: message.text and message.text.lower().startswith("/daily"))
+def daily_fallback(message):
+    handle_daily(message)
 
 # ---------------- START ----------------
 @bot.message_handler(commands=["start"])
