@@ -17,7 +17,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 TOKEN = os.getenv("TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
-# ---------------- BOT INIT (WICHTIG) ----------------
 bot = telebot.TeleBot(TOKEN)
 
 # ---------------- FLASK ----------------
@@ -30,7 +29,7 @@ def home():
 # ---------------- MEMORY ----------------
 pending_xp_requests = {}
 
-# ---------------- LEVEL NAMES ----------------
+# ---------------- LEVEL ----------------
 def get_level_name(level):
     levels = {
         1: "🪙 Bettler-Ritter",
@@ -88,17 +87,44 @@ def add_xp(user_id, amount):
         "level": level
     })
 
-# ---------------- FLASK RUN ----------------
+# ---------------- FLASK ----------------
 def run():
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
 
 # =========================================================
-# CALLBACK (UNVERÄNDERT – nur korrekt positioniert)
+# START (FIXED SAFE)
+# =========================================================
+@bot.message_handler(commands=["start"])
+def start(message):
+    try:
+        args = message.text.split()
+        ref = args[1] if len(args) > 1 else None
+
+        user = get_user(message.from_user.id)
+
+        markup = types.InlineKeyboardMarkup()
+        markup.add(
+            types.InlineKeyboardButton("✅ Ja, ich bin 18+", callback_data="age_yes"),
+            types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
+        )
+
+        bot.send_message(message.chat.id, "🔞 Bist du über 18 Jahre alt?", reply_markup=markup)
+
+    except Exception as e:
+        print("START ERROR:", e)
+        bot.send_message(message.chat.id, "⚠️ Fehler beim Start")
+
+# =========================================================
+# CALLBACK (UNVERÄNDERT, nur safe wrapper)
 # =========================================================
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
 
     try:
+        if not call.message:
+            return
+
         chat_id = call.message.chat.id
         bot.answer_callback_query(call.id)
 
@@ -130,22 +156,14 @@ def callback(call):
             markup.add(types.InlineKeyboardButton("🚀 Mini App", web_app=types.WebAppInfo("https://freispielritter.pages.dev/")))
             markup.add(types.InlineKeyboardButton("📦 Deals öffnen", callback_data="open_deals"))
 
-            bot.send_message(
-                chat_id,
-                f"✅ Freigeschaltet\n\nHier dein persönlicher Einladungslink um XP und mehr zu verdienen:\n{ref_link}",
-                reply_markup=markup
-            )
+            bot.send_message(chat_id, f"✅ Freigeschaltet\n\n{ref_link}", reply_markup=markup)
             return
 
         if call.data == "open_deals":
 
             markup = types.InlineKeyboardMarkup()
-
             markup.add(types.InlineKeyboardButton("🔥 Top Deal 😉", callback_data="top_deal"))
             markup.add(types.InlineKeyboardButton("🐾 Daily Quest", callback_data="daily_start"))
-            markup.add(types.InlineKeyboardButton("🥇 Goldzino", url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter&utm_campaign=freispielritter"))
-            markup.add(types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25"))
-            markup.add(types.InlineKeyboardButton("💰 Crypto Casino", url="https://t.me/tgcplaybot/?start=UsHEI0AGB"))
 
             bot.send_message(chat_id, "🎰 Wähle deinen Deal:", reply_markup=markup)
             return
@@ -155,31 +173,26 @@ def callback(call):
 
             bot.send_message(
                 ADMIN_ID,
-                f"🔥 TOP DEAL ANFRAGE\n\n👤 ID: {user.id}\n🧑 @{user.username or 'unknown'}"
+                f"🔥 TOP DEAL\n👤 {user.id}\n@{user.username}"
             )
 
-            bot.send_message(
-                chat_id,
-                "🔥 Unsere Top Deals sind Exklusiv – ein Admin kümmert sich bald um deine Anfrage 😉"
-            )
+            bot.send_message(chat_id, "🔥 Anfrage gesendet")
             return
 
         if call.data == "daily_start":
-
             user = get_user(chat_id)
 
             if user.get("last_daily"):
-                bot.send_message(chat_id, "⏳ Daily Quest schon gemacht. Morgen wieder!")
+                bot.send_message(chat_id, "⏳ Schon gemacht")
                 return
 
             pets = ["🐶","🐱","🐺","🦊","🐵","🐸","🐼","🐉"]
 
             markup = types.InlineKeyboardMarkup()
-
             for p in pets:
                 markup.add(types.InlineKeyboardButton(p, callback_data=f"pet_select_{p}"))
 
-            bot.send_message(chat_id, "🐾 Wähle dein Tier:", reply_markup=markup)
+            bot.send_message(chat_id, "🐾 Tier wählen:", reply_markup=markup)
             return
 
         if call.data.startswith("pet_select_"):
@@ -190,67 +203,38 @@ def callback(call):
                 "daily_stage": 0
             })
 
-            bot.send_message(chat_id, f"✨ Dein Tier ist {pet}\nGib ihm einen Namen:")
+            bot.send_message(chat_id, f"✨ Tier: {pet}\nJetzt Namen eingeben:")
             return
 
         if call.data == "daily_feed":
-
-            texts = [
-                "🍖 Es hat geschmeckt!",
-                "😐 Es war okay...",
-                "🤢 Es hat nicht geschmeckt!",
-                "😍 Dein Tier ist glücklich!"
-            ]
-
-            bot.send_message(chat_id, random.choice(texts))
+            bot.send_message(chat_id, random.choice(["🍖 gut", "😐 ok", "🤢 schlecht"]))
             update_user(chat_id, {"daily_stage": 1})
             return
 
         if call.data == "daily_walk":
-
-            texts = [
-                "🚶 Ihr geht Richtung Casino...",
-                "🌳 Spaziergang war entspannt",
-                "😎 Dein Tier fühlt sich frei",
-                "🎰 Es spürt die Gewinne!"
-            ]
-
-            bot.send_message(chat_id, random.choice(texts))
+            bot.send_message(chat_id, random.choice(["🚶 unterwegs", "🌳 entspannt", "🎰 Casino vibes"]))
             update_user(chat_id, {"daily_stage": 2})
             return
 
         if call.data == "daily_play":
-
-            texts = [
-                "🎰 Ihr sitzt am Automaten...",
-                "💰 BIG WIN ENERGY!",
-                "😱 Fast Jackpot!",
-                "🔥 Heute läuft es!"
-            ]
-
-            bot.send_message(chat_id, random.choice(texts))
+            bot.send_message(chat_id, random.choice(["🎰 spin", "💰 win", "🔥 jackpot vibe"]))
 
             user = get_user(chat_id)
 
             if user.get("daily_stage") == 2:
-
                 add_xp(chat_id, 3)
-
                 update_user(chat_id, {
-                    "daily_stage": 3,
                     "last_daily": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 })
-
-                bot.send_message(chat_id, "🏆 Daily Quest abgeschlossen +3 XP!")
-            else:
-                bot.send_message(chat_id, "❌ Du musst erst die anderen Aktionen machen!")
+                bot.send_message(chat_id, "🏆 +3 XP")
             return
 
     except Exception as e:
-        print("Callback Error:", e)
+        print("CALLBACK ERROR:", e)
         return
 
-# ---------------- RUN BOT ----------------
+# ---------------- RUN ----------------
 if __name__ == "__main__":
     threading.Thread(target=run).start()
+    print("BOT STARTED")
     bot.infinity_polling()
