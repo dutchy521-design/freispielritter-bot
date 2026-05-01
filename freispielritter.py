@@ -9,17 +9,35 @@ from datetime import datetime
 from supabase import create_client, Client
 import requests
 
-# ---------------- SUPABASE ----------------
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# =========================================================
+# 🔥 BOOT SAFETY CHECK (NEU – verhindert Railway "completed")
+# =========================================================
+
+print("=== BOT STARTING ===")
 
 TOKEN = os.getenv("TOKEN")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+ADMIN_ID_RAW = os.getenv("ADMIN_ID", "0")
 
 try:
-    ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+    ADMIN_ID = int(ADMIN_ID_RAW)
 except:
     ADMIN_ID = 0
+
+# ❌ HARD STOP wenn kritische ENV fehlen
+if not TOKEN:
+    print("❌ TOKEN fehlt → Bot stoppt")
+    exit(1)
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("❌ SUPABASE fehlt → Bot stoppt")
+    exit(1)
+
+print("✔ ENV OK")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -80,11 +98,7 @@ def add_xp(user_id, amount):
     user = get_user(user_id)
     xp = int(user.get("xp", 0)) + amount
     level = (xp // 100) + 1
-
-    update_user(user_id, {
-        "xp": xp,
-        "level": level
-    })
+    update_user(user_id, {"xp": xp, "level": level})
 
 # ---------------- FLASK ----------------
 def run():
@@ -92,7 +106,7 @@ def run():
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 # =========================================================
-# 🔥 ONLY FIXED START SECTION (409 CONFLICT FIX)
+# 🔥 SAFE START (FIXED Railway + Telegram Stability)
 # =========================================================
 
 def reset_telegram_state():
@@ -109,15 +123,15 @@ def reset_telegram_state():
 # ---------------- START BOT ----------------
 if __name__ == "__main__":
     try:
-        print("BOT BOOTING SAFE MODE...")
+        print("BOT BOOT MODE")
 
-        # 🔥 FIX: alte Sessions killen (verhindert 409 Conflict)
+        # 🔥 verhindert Telegram 409 + alte Sessions
         reset_telegram_state()
 
-        # Flask parallel starten
+        # Flask parallel
         threading.Thread(target=run, daemon=True).start()
 
-        print("STARTING TELEGRAM POLLING...")
+        print("STARTING POLLING...")
 
         bot.infinity_polling(
             skip_pending=True,
@@ -127,3 +141,5 @@ if __name__ == "__main__":
 
     except Exception as e:
         print("FATAL ERROR:", e)
+        while True:
+            pass
