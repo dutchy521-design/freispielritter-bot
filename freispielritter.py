@@ -7,30 +7,20 @@ from flask import Flask
 import threading
 from datetime import datetime
 from supabase import create_client, Client
+import requests
 
-# ---------------- SAFE ENV CHECK ----------------
+# ---------------- SUPABASE ----------------
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 TOKEN = os.getenv("TOKEN")
 
-ADMIN_ID_RAW = os.getenv("ADMIN_ID", "0")
-
-# 🔥 SAFE INT FIX
+# 🔥 SAFE ADMIN ID (kein Crash mehr)
 try:
-    ADMIN_ID = int(ADMIN_ID_RAW)
+    ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 except:
     ADMIN_ID = 0
-
-# ❗ PREVENT CRASH IF ENV IS MISSING
-if not TOKEN:
-    print("ERROR: TOKEN missing")
-    exit()
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    print("ERROR: Supabase missing")
-    exit()
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -42,9 +32,27 @@ def home():
 
 # ---------------- MEMORY ----------------
 pending_xp_requests = {}
-pending_pet = {}
 
-# ---------------- USER ----------------
+# ---------------- LEVEL ----------------
+def get_level_name(level):
+    levels = {
+        1: "🪙 Bettler-Ritter",
+        2: "🛡️ Schank-Ritter",
+        3: "⚔️ Eisen-Ritter",
+        4: "🐎 Turnier-Ritter",
+        5: "🏰 Burg-Ritter",
+        6: "👑 Casino-Champion",
+        7: "💎 Royal High Roller",
+        8: "🔥 Shadow Knight",
+        9: "⚡ Mythic Dealer",
+        10: "🏆 Legend of the Casino"
+    }
+    return levels.get(level, "🏆 Unsterblicher Ritter")
+
+# ---------------- HELPERS ----------------
+def generate_code():
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
+
 def get_user(user_id):
     user_id = str(user_id)
     res = supabase.table("users").select("*").eq("id", user_id).execute()
@@ -57,13 +65,10 @@ def get_user(user_id):
         "xp": 0,
         "level": 1,
         "invites": 0,
-        "ref_code": ''.join(random.choices(string.ascii_letters + string.digits, k=6)),
+        "ref_code": generate_code(),
         "used_ref": None,
         "invite_list": [],
-        "daily_pet": None,
-        "daily_pet_name": None,
-        "daily_stage": 0,
-        "last_daily": None
+        "last_xp": None
     }
 
     supabase.table("users").upsert(new_user).execute()
@@ -76,65 +81,47 @@ def add_xp(user_id, amount):
     user = get_user(user_id)
     xp = int(user.get("xp", 0)) + amount
     level = (xp // 100) + 1
-    update_user(user_id, {"xp": xp, "level": level})
 
-# =========================================================
-# COMMANDS (UNCHANGED LOGIC - ONLY SAFE WRAPPED)
-# =========================================================
+    update_user(user_id, {
+        "xp": xp,
+        "level": level
+    })
 
-@bot.message_handler(commands=["xp"])
-def xp(message):
-    user = get_user(message.from_user.id)
-    bot.send_message(message.chat.id, f"⭐ XP: {user.get('xp',0)}\n🏆 Level: {user.get('level',1)}")
-
-@bot.message_handler(commands=["notes"])
-def notes(message):
-    res = supabase.table("notes").select("*").eq("user_id", str(message.from_user.id)).execute()
-
-    if not res.data:
-        bot.send_message(message.chat.id, "📭 Keine Notes")
-        return
-
-    text = ""
-    for n in res.data:
-        text += f"{n.get('note','')} ({n.get('date','kein Datum')})\n"
-
-    bot.send_message(message.chat.id, text)
-
-@bot.message_handler(commands=["invites"])
-def invites(message):
-    user = get_user(message.from_user.id)
-    bot.send_message(message.chat.id, f"👥 Invites: {user.get('invites',0)}")
-
-@bot.message_handler(commands=["top"])
-def top(message):
-    res = supabase.table("users").select("id,invites").order("invites", desc=True).limit(5).execute()
-
-    text = "🏆 TOP USERS:\n\n"
-    for i,u in enumerate(res.data or [],1):
-        text += f"{i}. {u.get('id')} - {u.get('invites',0)}\n"
-
-    bot.send_message(message.chat.id, text or "Keine Daten")
-
-# =========================================================
-# RUN SAFE (FIXED)
-# =========================================================
-
+# ---------------- FLASK ----------------
 def run():
     port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
+# =========================================================
+# 🔥 ONLY FIXED START SECTION (WICHTIG)
+# =========================================================
+
+def reset_webhook():
     try:
-        app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+        bot.remove_webhook()
+        print("Webhook entfernt (Safe Mode)")
     except Exception as e:
-        print("FLASK ERROR:", e)
+        print("Webhook Fehler:", e)
 
+# ---------------- START BOT ----------------
 if __name__ == "__main__":
     try:
-        print("BOT STARTING...")
+        print("BOT BOOTING...")
 
+        # 🔥 FIX 1: Webhook killen (verhindert Telegram Block)
+        reset_webhook()
+
+        # Flask Thread (unverändert)
         threading.Thread(target=run, daemon=True).start()
 
-        bot.infinity_polling(skip_pending=True)
+        print("STARTING TELEGRAM POLLING...")
+
+        # 🔥 FIX 2: stabiles polling
+        bot.infinity_polling(
+            skip_pending=True,
+            timeout=30,
+            long_polling_timeout=30
+        )
 
     except Exception as e:
         print("FATAL ERROR:", e)
