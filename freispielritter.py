@@ -8,9 +8,10 @@ import threading
 from datetime import datetime
 from supabase import create_client, Client
 import requests
+import traceback
 
 # =========================================================
-# 🔥 BOOT SAFETY CHECK (UNVERÄNDERT + STABIL)
+# 🔥 BOOT SAFETY
 # =========================================================
 
 print("=== BOT STARTING ===")
@@ -47,7 +48,21 @@ def home():
 # ---------------- MEMORY ----------------
 pending_xp_requests = {}
 
-# ---------------- LEVEL ----------------
+# =========================================================
+# 🧠 CRASH GUARD (NEU)
+# =========================================================
+
+def safe_run(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:
+        print("HANDLER CRASH:", e)
+        traceback.print_exc()
+
+# =========================================================
+# LEVEL SYSTEM
+# =========================================================
+
 def get_level_name(level):
     levels = {
         1: "🪙 Bettler-Ritter",
@@ -63,7 +78,10 @@ def get_level_name(level):
     }
     return levels.get(level, "🏆 Unsterblicher Ritter")
 
-# ---------------- HELPERS ----------------
+# =========================================================
+# HELPERS (UNVERÄNDERT)
+# =========================================================
+
 def generate_code():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
 
@@ -97,13 +115,16 @@ def add_xp(user_id, amount):
     level = (xp // 100) + 1
     update_user(user_id, {"xp": xp, "level": level})
 
-# ---------------- FLASK ----------------
+# =========================================================
+# FLASK (UNVERÄNDERT)
+# =========================================================
+
 def run():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 # =========================================================
-# 🔥 SAFE POLLING FIX (NUR HIER GEÄNDERT)
+# RESET TELEGRAM STATE (409 FIX BLEIBT)
 # =========================================================
 
 def reset_telegram_state():
@@ -117,20 +138,23 @@ def reset_telegram_state():
     except:
         pass
 
+# =========================================================
+# START BOT (STABIL + CRASH SAFE)
+# =========================================================
+
 if __name__ == "__main__":
     try:
-        print("BOT BOOTING SAFE MODE")
+        print("BOT SAFE MODE START")
 
         reset_telegram_state()
 
         threading.Thread(target=run, daemon=True).start()
 
-        print("STARTING SAFE POLLING LOOP")
+        print("POLLING START")
 
-        # 🔥 FIX: stabiler restart-loop statt "Break infinity polling"
         while True:
             try:
-                bot.infinity_polling(
+                safe_run(bot.infinity_polling,
                     skip_pending=True,
                     timeout=30,
                     long_polling_timeout=30
