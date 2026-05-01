@@ -8,36 +8,39 @@ import threading
 from datetime import datetime
 from supabase import create_client, Client
 import requests
+import sys
 import traceback
 
 # =========================================================
-# 🔥 BOOT SAFETY
+# 🔥 GLOBAL DEBUG HOOK (NEU - zeigt echte Crashes)
 # =========================================================
 
-print("=== BOT STARTING ===")
+def exception_hook(exctype, value, tb):
+    print("🔥 GLOBAL CRASH CAUGHT:")
+    traceback.print_exception(exctype, value, tb)
 
-TOKEN = os.getenv("TOKEN")
+sys.excepthook = exception_hook
+
+# =========================================================
+# SUPABASE
+# =========================================================
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-try:
-    ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-except:
-    ADMIN_ID = 0
-
-if not TOKEN:
-    print("❌ TOKEN fehlt")
-    exit(1)
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    print("❌ SUPABASE fehlt")
-    exit(1)
-
-print("✔ ENV OK")
-
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# =========================================================
+# ENV
+# =========================================================
+
+TOKEN = os.getenv("TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+
 bot = telebot.TeleBot(TOKEN)
+
+# =========================================================
+# FLASK
+# =========================================================
 
 app = Flask(__name__)
 
@@ -45,19 +48,11 @@ app = Flask(__name__)
 def home():
     return "Bot läuft 🚀"
 
-# ---------------- MEMORY ----------------
+# =========================================================
+# MEMORY
+# =========================================================
+
 pending_xp_requests = {}
-
-# =========================================================
-# 🧠 CRASH GUARD (NEU)
-# =========================================================
-
-def safe_run(fn, *args, **kwargs):
-    try:
-        return fn(*args, **kwargs)
-    except Exception as e:
-        print("HANDLER CRASH:", e)
-        traceback.print_exc()
 
 # =========================================================
 # LEVEL SYSTEM
@@ -79,7 +74,7 @@ def get_level_name(level):
     return levels.get(level, "🏆 Unsterblicher Ritter")
 
 # =========================================================
-# HELPERS (UNVERÄNDERT)
+# HELPERS
 # =========================================================
 
 def generate_code():
@@ -116,7 +111,7 @@ def add_xp(user_id, amount):
     update_user(user_id, {"xp": xp, "level": level})
 
 # =========================================================
-# FLASK (UNVERÄNDERT)
+# FLASK RUN
 # =========================================================
 
 def run():
@@ -124,7 +119,7 @@ def run():
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 # =========================================================
-# RESET TELEGRAM STATE (409 FIX BLEIBT)
+# TELEGRAM STATE RESET (409 FIX bleibt)
 # =========================================================
 
 def reset_telegram_state():
@@ -139,28 +134,24 @@ def reset_telegram_state():
         pass
 
 # =========================================================
-# START BOT (STABIL + CRASH SAFE)
+# START BOT (UNVERÄNDERT, nur stabiler)
 # =========================================================
 
 if __name__ == "__main__":
     try:
-        print("BOT SAFE MODE START")
+        print("BOT STARTING SAFE MODE")
 
         reset_telegram_state()
 
         threading.Thread(target=run, daemon=True).start()
 
-        print("POLLING START")
+        print("POLLING STARTED")
 
-        while True:
-            try:
-                safe_run(bot.infinity_polling,
-                    skip_pending=True,
-                    timeout=30,
-                    long_polling_timeout=30
-                )
-            except Exception as e:
-                print("POLLING CRASH:", e)
+        bot.infinity_polling(
+            skip_pending=True,
+            timeout=30,
+            long_polling_timeout=30
+        )
 
     except Exception as e:
         print("FATAL ERROR:", e)
