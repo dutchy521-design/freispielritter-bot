@@ -78,17 +78,50 @@ def add_xp(user_id, amount):
     level = (xp // 100) + 1
     update_user(user_id, {"xp": xp, "level": level})
 
-# ---------------- START (UNVERÄNDERT) ----------------
+# ---------------- START (WIEDER ORIGINAL FLOW) ----------------
 @bot.message_handler(commands=["start"])
 def start(message):
 
+    args = message.text.split()
+    ref = args[1] if len(args) > 1 else None
+
+    user = get_user(message.from_user.id)
+
+    if ref and not user.get("used_ref"):
+        ref_user_id = supabase.table("users").select("id").eq("ref_code", ref).execute()
+
+        if ref_user_id.data:
+            inviter_id = ref_user_id.data[0]["id"]
+
+            if str(inviter_id) != str(message.from_user.id):
+
+                inviter = get_user(inviter_id)
+
+                invite_list = inviter.get("invite_list") or []
+                invite_list.append({
+                    "username": message.from_user.username or "unknown",
+                    "date": datetime.now().strftime("%d.%m.%Y %H:%M")
+                })
+
+                update_user(inviter_id, {
+                    "invites": int(inviter.get("invites", 0)) + 1,
+                    "invite_list": invite_list
+                })
+
+                add_xp(inviter_id, 10)
+                update_user(message.from_user.id, {"used_ref": ref})
+
+    # 🔞 ORIGINAL BLEIBT
     markup = types.InlineKeyboardMarkup()
     markup.row(
-        types.InlineKeyboardButton("📦 Deals öffnen", callback_data="open_deals"),
-        types.InlineKeyboardButton("🧭 Quests", callback_data="quest_start")
+        types.InlineKeyboardButton("✅ Ja", callback_data="age_yes"),
+        types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
     )
 
-    bot.send_message(message.chat.id, "🔓 Willkommen im System", reply_markup=markup)
+    bot.send_message(message.chat.id, "🔞 Bist du über 18 Jahre alt?", reply_markup=markup)
+
+
+CHANNEL = "@Freispielritter"
 
 # ---------------- CALLBACK ----------------
 @bot.callback_query_handler(func=lambda call: True)
@@ -96,23 +129,58 @@ def callback(call):
 
     chat_id = call.message.chat.id
 
-    # ---------------- DEAL FIX ----------------
+    # ---------------- AGE ----------------
+    if call.data == "age_no":
+        bot.send_message(chat_id, "❌ Zugriff verweigert.")
+        return
+
+    if call.data == "age_yes":
+
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("📢 Zum Kanal", url="https://t.me/Freispielritter"))
+        markup.add(types.InlineKeyboardButton("✅ Ich bin beigetreten", callback_data="check_channel"))
+
+        bot.send_message(chat_id, "👉 Folgst du schon unserem Kanal?", reply_markup=markup)
+        return
+
+    # ---------------- CHANNEL CHECK (WIEDER ORIGINAL LOGIK) ----------------
+    if call.data == "check_channel":
+        try:
+            member = bot.get_chat_member(CHANNEL, call.from_user.id)
+            if member.status not in ["member", "administrator", "creator"]:
+                bot.send_message(chat_id, "❌ Du bist noch nicht im Kanal.")
+                return
+        except:
+            bot.send_message(chat_id, "⚠️ Fehler beim Prüfen.")
+            return
+
+        user = get_user(chat_id)
+        ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
+
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🚀 Mini App", web_app=types.WebAppInfo("https://freispielritter.pages.dev/")))
+        markup.add(types.InlineKeyboardButton("📦 Deals öffnen", callback_data="open_deals"))
+        markup.add(types.InlineKeyboardButton("🧭 Quests", callback_data="quest_start"))
+
+        bot.send_message(
+            chat_id,
+            "━━━━━━━━━━━━━━\n✅ FREIGESCHALTET\n━━━━━━━━━━━━━━\n\n"
+            f"Hier dein Link:\n{ref_link}",
+            reply_markup=markup
+        )
+        return
+
+    # ---------------- DEALS FIX ----------------
     if call.data == "open_deals":
 
         markup = types.InlineKeyboardMarkup()
-        markup.row(
-            types.InlineKeyboardButton("🔥 Top Deal", callback_data="top_deal")
-        )
-        markup.row(
-            types.InlineKeyboardButton("🥇 Goldzino", url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter"),
-            types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25")
-        )
+        markup.row(types.InlineKeyboardButton("🔥 Top Deal", callback_data="top_deal"))
 
         bot.answer_callback_query(call.id)
         bot.send_message(chat_id, "🎰 Deals geöffnet")
         return
 
-    # ---------------- QUEST START ----------------
+    # ---------------- QUEST SYSTEM ----------------
     if call.data == "quest_start":
 
         pets = ["🐶","🐱","🐴","🦊","🐼","🐯","🐸","🐉"]
@@ -121,66 +189,20 @@ def callback(call):
         for p in pets:
             markup.add(types.InlineKeyboardButton(p, callback_data=f"quest_pet_{p}"))
 
-        bot.send_message(chat_id, "🐾 Wähle dein Quest-Tier:", reply_markup=markup)
+        bot.send_message(chat_id, "🐾 Tier auswählen:", reply_markup=markup)
         return
 
-    # ---------------- PET NAME ----------------
     if call.data.startswith("quest_pet_"):
 
         pet = call.data.split("_")[2]
 
-        quest_sessions[str(call.from_user.id)] = {
-            "pet": pet
-        }
+        quest_sessions[str(call.from_user.id)] = {"pet": pet}
 
-        bot.send_message(chat_id, f"✏️ Wie soll dein {pet} heißen?")
+        bot.send_message(chat_id, f"✏️ Name für dein {pet}?")
         bot.register_next_step_handler(call.message, quest_name)
         return
 
-    # ---------------- QUEST ACTIONS ----------------
-    if call.data in ["quest_feed", "quest_walk", "quest_play"]:
-
-        uid = str(call.from_user.id)
-
-        if uid not in quest_sessions:
-            return
-
-        if uid in quest_cooldowns:
-            diff = (datetime.now() - quest_cooldowns[uid]).total_seconds()
-            if diff < 86400:
-                bot.send_message(chat_id, "⏳ Quest erst in 24h wieder verfügbar.")
-                return
-
-        pet = quest_sessions[uid]
-        name = pet.get("name", "Tier")
-        emoji = pet.get("pet", "🐾")
-
-        if call.data == "quest_feed":
-            msg = random.choice([
-                f"😋 {name} hat es genossen!",
-                f"🤢 {name} ist nicht begeistert..."
-            ])
-
-        elif call.data == "quest_walk":
-            msg = random.choice([
-                f"🚶 {name} macht sich auf den Weg ins Casino!",
-                f"🌆 {name} genießt die Nacht!"
-            ])
-
-        else:
-            msg = random.choice([
-                f"🎰 {name} spielt glücklich am Automaten!",
-                f"🔥 {name} ist im Jackpot-Modus!"
-            ])
-
-        add_xp(uid, 3)
-        quest_cooldowns[uid] = datetime.now()
-
-        bot.send_message(chat_id, f"{emoji} {msg}\n💰 +3 XP Quest abgeschlossen!")
-        return
-
-
-# ---------------- QUEST NAME HANDLER ----------------
+# ---------------- NAME ----------------
 def quest_name(message):
 
     uid = str(message.from_user.id)
@@ -197,11 +219,7 @@ def quest_name(message):
         types.InlineKeyboardButton("🎰 Spielen", callback_data="quest_play")
     )
 
-    bot.send_message(
-        message.chat.id,
-        f"🐾 Dein Tier {message.text} ist bereit!",
-        reply_markup=markup
-    )
+    bot.send_message(message.chat.id, f"🐾 {message.text} ist bereit!", reply_markup=markup)
 
 # ---------------- RUN ----------------
 def run():
