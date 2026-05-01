@@ -85,31 +85,37 @@ def add_xp(user_id, amount):
         "level": level
     })
 
-# ---------------- DAILY STREAK ----------------
+# ---------------- DAILY STREAK (FIXED) ----------------
 @bot.message_handler(commands=["daily"])
 def daily(message):
     user = get_user(message.from_user.id)
 
     now = datetime.now()
-
     last_daily = user.get("last_daily")
     streak = int(user.get("daily_streak", 0))
 
-    if last_daily:
-        last_daily = datetime.strptime(last_daily, "%Y-%m-%d %H:%M:%S")
+    try:
+        if last_daily:
+            try:
+                last_daily_dt = datetime.strptime(last_daily, "%Y-%m-%d %H:%M:%S")
+            except:
+                # Falls falsches Format → reset
+                last_daily_dt = None
 
-        # Schon heute abgeholt
-        if now.date() == last_daily.date():
-            bot.send_message(message.chat.id, "⏳ Du hast dein Daily heute schon abgeholt!")
-            return
+            if last_daily_dt:
+                if now.date() == last_daily_dt.date():
+                    bot.send_message(message.chat.id, "⏳ Du hast dein Daily heute schon abgeholt!")
+                    return
 
-        # Gestern → Streak weiter
-        if now.date() == (last_daily + timedelta(days=1)).date():
-            streak += 1
+                if now.date() == (last_daily_dt + timedelta(days=1)).date():
+                    streak += 1
+                else:
+                    streak = 1
+            else:
+                streak = 1
         else:
-            # Reset
             streak = 1
-    else:
+    except:
         streak = 1
 
     if streak > 7:
