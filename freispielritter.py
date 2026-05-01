@@ -78,6 +78,7 @@ def add_xp(user_id, amount):
 
     update_user(user_id, {"xp": xp, "level": level})
 
+
 # ---------------- /XP ----------------
 @bot.message_handler(commands=["xp"])
 def xp_cmd(message):
@@ -90,6 +91,43 @@ def xp_cmd(message):
         f"Level: {user['level']}\n"
         f"Rang: {get_level_name(user['level'])}"
     )
+
+
+# ---------------- /DAILY (FIX) ----------------
+@bot.message_handler(commands=["daily"])
+def daily(message):
+
+    user = get_user(message.from_user.id)
+
+    last = user.get("last_daily")
+    today = datetime.now().date().isoformat()
+
+    if last == today:
+        bot.send_message(message.chat.id, "⏳ Du hast dein Daily heute schon geholt.")
+        return
+
+    add_xp(message.from_user.id, 15)
+    update_user(message.from_user.id, {"last_daily": today})
+
+    bot.send_message(
+        message.chat.id,
+        "🎁 Daily Reward abgeholt!\n"
+        "💰 +15 XP erhalten"
+    )
+
+
+# ---------------- /NOTES (FIX) ----------------
+@bot.message_handler(commands=["notes"])
+def notes(message):
+
+    bot.send_message(
+        message.chat.id,
+        "📝 NOTES SYSTEM\n\n"
+        "📸 Screenshot → Admin prüft XP\n"
+        "🎁 /daily → tägliche Belohnung\n"
+        "📊 /xp → dein Status"
+    )
+
 
 # ---------------- START ----------------
 @bot.message_handler(commands=["start"])
@@ -132,7 +170,9 @@ def start(message):
 
     bot.send_message(message.chat.id, "🔞 Bist du über 18 Jahre alt?", reply_markup=markup)
 
+
 CHANNEL = "@Freispielritter"
+
 
 # ---------------- CALLBACK ----------------
 @bot.callback_query_handler(func=lambda call: True)
@@ -179,36 +219,6 @@ def callback(call):
         )
         return
 
-    # DEALS
-    if call.data == "open_deals":
-
-        markup = types.InlineKeyboardMarkup()
-        markup.row(types.InlineKeyboardButton("🔥 Top Deal 😉", callback_data="top_deal"))
-        markup.row(
-            types.InlineKeyboardButton("🥇 Goldzino", url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter&utm_campaign=freispielritter"),
-            types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25")
-        )
-        markup.row(types.InlineKeyboardButton("💰 Crypto Casino", url="https://t.me/tgcplaybot/?start=UsHEI0AGB"))
-
-        bot.send_message(chat_id, "🎰 Wähle deinen Deal:", reply_markup=markup)
-        return
-
-    # TOP DEAL FIXED TEXT
-    if call.data == "top_deal":
-        user = call.from_user
-
-        bot.send_message(
-            ADMIN_ID,
-            f"🔥 TOP DEAL ANFRAGE\n👤 @{user.username or 'unknown'} | ID: {user.id}"
-        )
-
-        bot.send_message(
-            chat_id,
-            "🔥 Exklusiver Deal erkannt!\n"
-            "👑 Ein Admin kümmert sich bald persönlich darum."
-        )
-        return
-
     # ---------------- XP SCREENSHOT ----------------
     if call.data.startswith("xp_yes_"):
 
@@ -217,11 +227,11 @@ def callback(call):
         if req_id in pending_xp_requests:
             data = pending_xp_requests[req_id]
 
-            add_xp(data["user_id"], 20)
+            add_xp(data["user_id"], 5)  # FIX: 5 XP statt 20
 
             bot.send_message(
                 data["user_id"],
-                f"✅ Screenshot bestätigt!\n💬 {data['note']}\n🎉 +20 XP"
+                f"✅ Screenshot bestätigt!\n💬 {data['note']}\n🎉 +5 XP"
             )
 
             bot.send_message(chat_id, "XP vergeben ✔️")
@@ -241,7 +251,8 @@ def callback(call):
             pending_xp_requests.pop(req_id, None)
         return
 
-# ---------------- SCREENSHOT FIX ----------------
+
+# ---------------- SCREENSHOT ----------------
 @bot.message_handler(content_types=['photo'])
 def screenshot(message):
 
@@ -273,32 +284,11 @@ def screenshot(message):
         reply_markup=markup
     )
 
-# ---------------- PET SYSTEM ----------------
-def pet_name(message):
-
-    uid = str(message.from_user.id)
-
-    if uid not in pet_sessions:
-        return
-
-    pet_sessions[uid]["name"] = message.text
-
-    markup = types.InlineKeyboardMarkup()
-    markup.row(
-        types.InlineKeyboardButton("🍖 Füttern", callback_data="pet_feed"),
-        types.InlineKeyboardButton("🚶 Spazieren", callback_data="pet_walk"),
-        types.InlineKeyboardButton("🎮 Spielen", callback_data="pet_play")
-    )
-
-    bot.send_message(
-        message.chat.id,
-        f"🐾 Dein Tier heißt jetzt {message.text}",
-        reply_markup=markup
-    )
 
 # ---------------- RUN ----------------
 def run():
     app.run(host="0.0.0.0", port=8080)
+
 
 if __name__ == "__main__":
     threading.Thread(target=run).start()
