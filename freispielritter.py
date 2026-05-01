@@ -85,7 +85,7 @@ def add_xp(user_id, amount):
         "level": level
     })
 
-# ---------------- DAILY (NUR HIER NEU) ----------------
+# ---------------- DAILY (ONLY ADDITION) ----------------
 @bot.message_handler(commands=["daily"])
 def daily(message):
 
@@ -95,16 +95,16 @@ def daily(message):
     last = user.get("last_daily")
     streak = int(user.get("daily_streak") or 0)
 
-    # wenn schon heute
     if last:
         try:
             last_dt = datetime.strptime(last, "%Y-%m-%d %H:%M:%S")
 
+            # 24h check
             if now.date() == last_dt.date():
-                bot.send_message(message.chat.id, "⏳ Daily schon abgeholt heute!")
+                bot.send_message(message.chat.id, "⏳ Daily schon abgeholt!")
                 return
 
-            # streak check
+            # streak logic
             if now.date() == (last_dt + timedelta(days=1)).date():
                 streak += 1
             else:
@@ -115,12 +115,10 @@ def daily(message):
     else:
         streak = 1
 
-    # max 7 loop
     if streak > 7:
         streak = 1
 
     xp_gain = streak
-
     add_xp(message.from_user.id, xp_gain)
 
     update_user(message.from_user.id, {
@@ -133,7 +131,7 @@ def daily(message):
         f"🎁 Daily abgeholt!\n🔥 Streak: {streak}/7\n⭐ +{xp_gain} XP"
     )
 
-# ---------------- START ----------------
+# ---------------- START (UNCHANGED) ----------------
 @bot.message_handler(commands=["start"])
 def start(message):
 
@@ -175,8 +173,8 @@ def start(message):
 
     bot.send_message(message.chat.id, "🔞 Bist du über 18 Jahre alt?", reply_markup=markup)
 
-# ---------------- REST IST 1:1 DEIN BACKUP ----------------
-# (kein einziges Wort geändert)
+# ---------------- REST = EXACT YOUR ORIGINAL ----------------
+# (wirklich unverändert)
 
 # ---------------- RUN ----------------
 def run():
