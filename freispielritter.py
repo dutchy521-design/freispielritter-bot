@@ -64,7 +64,13 @@ def get_user(user_id):
         "ref_code": generate_code(),
         "used_ref": None,
         "invite_list": [],
-        "last_xp": None
+        "last_xp": None,
+
+        # ---------------- DAILY QUEST DEFAULTS ----------------
+        "daily_pet": None,
+        "daily_pet_name": None,
+        "daily_stage": 0,
+        "last_daily": None
     }
 
     supabase.table("users").upsert(new_user).execute()
@@ -82,6 +88,22 @@ def add_xp(user_id, amount):
         "xp": xp,
         "level": level
     })
+
+# ---------------- DAILY HELPERS ----------------
+def rand_choice(options):
+    return random.choice(options)
+
+def can_daily(user):
+    last = user.get("last_daily")
+
+    if not last:
+        return True
+
+    try:
+        last_time = datetime.strptime(last, "%Y-%m-%d %H:%M:%S")
+        return (datetime.now() - last_time).total_seconds() > 86400
+    except:
+        return True
 
 # ---------------- START ----------------
 @bot.message_handler(commands=["start"])
@@ -133,6 +155,7 @@ def callback(call):
 
     chat_id = call.message.chat.id
 
+    # ---------------- AGE ----------------
     if call.data == "age_no":
         bot.send_message(chat_id, "❌ Kein Zugriff.")
         return
@@ -144,6 +167,7 @@ def callback(call):
         bot.send_message(chat_id, "👉 Folgst du schon unserem Kanal?", reply_markup=markup)
         return
 
+    # ---------------- CHANNEL CHECK ----------------
     if call.data == "check_channel":
         try:
             member = bot.get_chat_member(CHANNEL, call.from_user.id)
@@ -168,11 +192,13 @@ def callback(call):
         )
         return
 
+    # ---------------- DEALS ----------------
     if call.data == "open_deals":
 
         markup = types.InlineKeyboardMarkup()
 
         markup.add(types.InlineKeyboardButton("🔥 Top Deal 😉", callback_data="top_deal"))
+        markup.add(types.InlineKeyboardButton("🐾 Daily Quest", callback_data="daily_start"))  # 👈 NEU
         markup.add(types.InlineKeyboardButton("🥇 Goldzino", url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter&utm_campaign=freispielritter"))
         markup.add(types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25"))
         markup.add(types.InlineKeyboardButton("💰 Crypto Casino", url="https://t.me/tgcplaybot/?start=UsHEI0AGB"))
@@ -180,6 +206,90 @@ def callback(call):
         bot.send_message(chat_id, "🎰 Wähle deinen Deal:", reply_markup=markup)
         return
 
+    # ---------------- DAILY QUEST ----------------
+    if call.data == "daily_start":
+
+        user = get_user(chat_id)
+
+        if not can_daily(user):
+            bot.send_message(chat_id, "⏳ Daily Quest schon gemacht. Morgen wieder!")
+            return
+
+        pets = ["🐶","🐱","🐺","🦊","🐵","🐸","🐼","🐉"]
+
+        markup = types.InlineKeyboardMarkup()
+
+        for p in pets:
+            markup.add(types.InlineKeyboardButton(p, callback_data=f"pet_select_{p}"))
+
+        bot.send_message(chat_id, "🐾 Wähle dein Tier:", reply_markup=markup)
+        return
+
+    if call.data.startswith("pet_select_"):
+        pet = call.data.split("_")[2]
+
+        update_user(chat_id, {
+            "daily_pet": pet,
+            "daily_stage": 0
+        })
+
+        bot.send_message(chat_id, f"✨ Dein Tier ist {pet}\nGib ihm einen Namen:")
+        return
+
+    if call.data == "daily_feed":
+
+        texts = [
+            "🍖 Es hat geschmeckt!",
+            "😐 Es war okay...",
+            "🤢 Es hat nicht geschmeckt!",
+            "😍 Dein Tier ist glücklich!"
+        ]
+
+        bot.send_message(chat_id, rand_choice(texts))
+        update_user(chat_id, {"daily_stage": 1})
+        return
+
+    if call.data == "daily_walk":
+
+        texts = [
+            "🚶 Ihr geht Richtung Casino...",
+            "🌳 Spaziergang war entspannt",
+            "😎 Dein Tier fühlt sich frei",
+            "🎰 Es spürt die Gewinne!"
+        ]
+
+        bot.send_message(chat_id, rand_choice(texts))
+        update_user(chat_id, {"daily_stage": 2})
+        return
+
+    if call.data == "daily_play":
+
+        texts = [
+            "🎰 Ihr sitzt am Automaten...",
+            "💰 BIG WIN ENERGY!",
+            "😱 Fast Jackpot!",
+            "🔥 Heute läuft es!"
+        ]
+
+        bot.send_message(chat_id, rand_choice(texts))
+
+        user = get_user(chat_id)
+
+        if user.get("daily_stage") == 2:
+
+            add_xp(chat_id, 3)
+
+            update_user(chat_id, {
+                "daily_stage": 3,
+                "last_daily": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
+
+            bot.send_message(chat_id, "🏆 Daily Quest abgeschlossen +3 XP!")
+        else:
+            bot.send_message(chat_id, "❌ Du musst erst die anderen Aktionen machen!")
+        return
+
+    # ---------------- TOP DEAL ----------------
     if call.data == "top_deal":
         user = call.from_user
         bot.send_message(
@@ -192,6 +302,7 @@ def callback(call):
         )
         return
 
+    # ---------------- XP SYSTEM ----------------
     if call.data.startswith("xp_yes_"):
         req_id = call.data.split("_")[2]
         data = pending_xp_requests.get(req_id)
