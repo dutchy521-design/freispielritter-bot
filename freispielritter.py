@@ -1,10 +1,105 @@
+import telebot
+import os
+import random
+import string
+from telebot import types
+from flask import Flask
+import threading
+from datetime import datetime
+from supabase import create_client, Client
+
+# ---------------- SUPABASE ----------------
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# ---------------- ENV ----------------
+TOKEN = os.getenv("TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+
+# ---------------- BOT INIT (WICHTIG) ----------------
+bot = telebot.TeleBot(TOKEN)
+
+# ---------------- FLASK ----------------
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot läuft 🚀"
+
+# ---------------- MEMORY ----------------
+pending_xp_requests = {}
+
+# ---------------- LEVEL NAMES ----------------
+def get_level_name(level):
+    levels = {
+        1: "🪙 Bettler-Ritter",
+        2: "🛡️ Schank-Ritter",
+        3: "⚔️ Eisen-Ritter",
+        4: "🐎 Turnier-Ritter",
+        5: "🏰 Burg-Ritter",
+        6: "👑 Casino-Champion",
+        7: "💎 Royal High Roller",
+        8: "🔥 Shadow Knight",
+        9: "⚡ Mythic Dealer",
+        10: "🏆 Legend of the Casino"
+    }
+    return levels.get(level, "🏆 Unsterblicher Ritter")
+
+# ---------------- HELPERS ----------------
+def generate_code():
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
+
+def get_user(user_id):
+    user_id = str(user_id)
+    res = supabase.table("users").select("*").eq("id", user_id).execute()
+
+    if res.data:
+        return res.data[0]
+
+    new_user = {
+        "id": user_id,
+        "xp": 0,
+        "level": 1,
+        "invites": 0,
+        "ref_code": generate_code(),
+        "used_ref": None,
+        "invite_list": [],
+        "last_xp": None,
+        "daily_pet": None,
+        "daily_pet_name": None,
+        "daily_stage": 0,
+        "last_daily": None
+    }
+
+    supabase.table("users").upsert(new_user).execute()
+    return new_user
+
+def update_user(user_id, fields):
+    supabase.table("users").update(fields).eq("id", str(user_id)).execute()
+
+def add_xp(user_id, amount):
+    user = get_user(user_id)
+    xp = int(user.get("xp", 0)) + amount
+    level = (xp // 100) + 1
+
+    update_user(user_id, {
+        "xp": xp,
+        "level": level
+    })
+
+# ---------------- FLASK RUN ----------------
+def run():
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+
+# =========================================================
+# CALLBACK (UNVERÄNDERT – nur korrekt positioniert)
+# =========================================================
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
 
     try:
         chat_id = call.message.chat.id
-
-        # 🔥 WICHTIG: verhindert „Button reagiert nicht“
         bot.answer_callback_query(call.id)
 
         if call.data == "age_no":
@@ -154,3 +249,8 @@ def callback(call):
     except Exception as e:
         print("Callback Error:", e)
         return
+
+# ---------------- RUN BOT ----------------
+if __name__ == "__main__":
+    threading.Thread(target=run).start()
+    bot.infinity_polling()
