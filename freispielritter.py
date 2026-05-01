@@ -93,30 +93,23 @@ def run():
     app.run(host="0.0.0.0", port=port)
 
 # =========================================================
-# START (FIXED SAFE)
+# START
 # =========================================================
 @bot.message_handler(commands=["start"])
 def start(message):
-    try:
-        args = message.text.split()
-        ref = args[1] if len(args) > 1 else None
 
-        user = get_user(message.from_user.id)
+    user = get_user(message.from_user.id)
 
-        markup = types.InlineKeyboardMarkup()
-        markup.add(
-            types.InlineKeyboardButton("✅ Ja, ich bin 18+", callback_data="age_yes"),
-            types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
-        )
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("✅ Ja, ich bin 18+", callback_data="age_yes"),
+        types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
+    )
 
-        bot.send_message(message.chat.id, "🔞 Bist du über 18 Jahre alt?", reply_markup=markup)
-
-    except Exception as e:
-        print("START ERROR:", e)
-        bot.send_message(message.chat.id, "⚠️ Fehler beim Start")
+    bot.send_message(message.chat.id, "🔞 Bist du über 18 Jahre alt?", reply_markup=markup)
 
 # =========================================================
-# CALLBACK (UNVERÄNDERT, nur safe wrapper)
+# CALLBACK (FULL RESTORE + SAFE)
 # =========================================================
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
@@ -128,6 +121,7 @@ def callback(call):
         chat_id = call.message.chat.id
         bot.answer_callback_query(call.id)
 
+        # ---------------- AGE ----------------
         if call.data == "age_no":
             bot.send_message(chat_id, "❌ Kein Zugriff.")
             return
@@ -139,14 +133,12 @@ def callback(call):
             bot.send_message(chat_id, "👉 Folgst du schon unserem Kanal?", reply_markup=markup)
             return
 
+        # ---------------- CHANNEL ----------------
         if call.data == "check_channel":
-            try:
-                member = bot.get_chat_member("@Freispielritter", call.from_user.id)
-                if member.status not in ["member", "administrator", "creator"]:
-                    bot.send_message(chat_id, "❌ Nicht im Kanal.")
-                    return
-            except:
-                bot.send_message(chat_id, "⚠️ Fehler.")
+
+            member = bot.get_chat_member("@Freispielritter", call.from_user.id)
+            if member.status not in ["member", "administrator", "creator"]:
+                bot.send_message(chat_id, "❌ Nicht im Kanal.")
                 return
 
             user = get_user(chat_id)
@@ -159,27 +151,39 @@ def callback(call):
             bot.send_message(chat_id, f"✅ Freigeschaltet\n\n{ref_link}", reply_markup=markup)
             return
 
+        # ---------------- DEALS (WIEDER KOMPLETT) ----------------
         if call.data == "open_deals":
 
             markup = types.InlineKeyboardMarkup()
+
             markup.add(types.InlineKeyboardButton("🔥 Top Deal 😉", callback_data="top_deal"))
             markup.add(types.InlineKeyboardButton("🐾 Daily Quest", callback_data="daily_start"))
+            markup.add(types.InlineKeyboardButton("🥇 Goldzino", url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter&utm_campaign=freispielritter"))
+            markup.add(types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25"))
+            markup.add(types.InlineKeyboardButton("💰 Crypto Casino", url="https://t.me/tgcplaybot/?start=UsHEI0AGB"))
 
             bot.send_message(chat_id, "🎰 Wähle deinen Deal:", reply_markup=markup)
             return
 
+        # ---------------- TOP DEAL FIX TEXT ----------------
         if call.data == "top_deal":
+
             user = call.from_user
 
             bot.send_message(
                 ADMIN_ID,
-                f"🔥 TOP DEAL\n👤 {user.id}\n@{user.username}"
+                f"🔥 TOP DEAL ANFRAGE\n\n👤 ID: {user.id}\n🧑 @{user.username or 'unknown'}"
             )
 
-            bot.send_message(chat_id, "🔥 Anfrage gesendet")
+            bot.send_message(
+                chat_id,
+                "🔥 Unsere Top Deals sind Exklusiv – ein Admin kümmert sich bald um deine Anfrage 😉"
+            )
             return
 
+        # ---------------- DAILY ----------------
         if call.data == "daily_start":
+
             user = get_user(chat_id)
 
             if user.get("last_daily"):
@@ -206,6 +210,7 @@ def callback(call):
             bot.send_message(chat_id, f"✨ Tier: {pet}\nJetzt Namen eingeben:")
             return
 
+        # ---------------- DAILY ACTIONS ----------------
         if call.data == "daily_feed":
             bot.send_message(chat_id, random.choice(["🍖 gut", "😐 ok", "🤢 schlecht"]))
             update_user(chat_id, {"daily_stage": 1})
@@ -217,6 +222,7 @@ def callback(call):
             return
 
         if call.data == "daily_play":
+
             bot.send_message(chat_id, random.choice(["🎰 spin", "💰 win", "🔥 jackpot vibe"]))
 
             user = get_user(chat_id)
@@ -236,5 +242,4 @@ def callback(call):
 # ---------------- RUN ----------------
 if __name__ == "__main__":
     threading.Thread(target=run).start()
-    print("BOT STARTED")
     bot.infinity_polling()
