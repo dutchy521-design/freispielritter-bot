@@ -27,8 +27,7 @@ def home():
 
 # ---------------- MEMORY ----------------
 pending_xp_requests = {}
-pending_name = {}
-pet_state = {}
+pending_pet = {}
 
 # ---------------- USER ----------------
 def get_user(user_id):
@@ -70,11 +69,11 @@ def start(message):
 
     markup = types.InlineKeyboardMarkup()
     markup.add(
-        types.InlineKeyboardButton("Bist du über 18?", callback_data="age_yes"),
-        types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
+        types.InlineKeyboardButton("🟢 Ja", callback_data="age_yes"),
+        types.InlineKeyboardButton("🔴 Nein", callback_data="age_no")
     )
 
-    bot.send_message(message.chat.id, "🔞 Bestätigung:", reply_markup=markup)
+    bot.send_message(message.chat.id, "Bist du über 18 Jahre alt?", reply_markup=markup)
 
 # ---------------- CALLBACK ----------------
 @bot.callback_query_handler(func=lambda call: True)
@@ -97,7 +96,7 @@ def callback(call):
             bot.send_message(chat_id, "👉 Treten unserem Kanal bei.", reply_markup=markup)
             return
 
-        # ---------------- CHANNEL CHECK ----------------
+        # ---------------- CHANNEL ----------------
         if call.data == "check_channel":
 
             user = get_user(chat_id)
@@ -105,7 +104,7 @@ def callback(call):
 
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton("🚀 Mini App", web_app=types.WebAppInfo("https://freispielritter.pages.dev/")))
-            markup.add(types.InlineKeyboardButton("📦 Deals öffnen", callback_data="open_deals"))
+            markup.add(types.InlineKeyboardButton("📦 Deals", callback_data="open_deals"))
 
             bot.send_message(chat_id, f"✅ Freigeschaltet\n\n{ref_link}", reply_markup=markup)
             return
@@ -128,18 +127,17 @@ def callback(call):
         # ---------------- TOP DEAL FIX ----------------
         if call.data == "top_deal":
 
+            user = call.from_user
+
             bot.send_message(
                 ADMIN_ID,
-                f"TOP DEAL ANFRAGE\nUSER ID: {call.from_user.id}"
+                f"TOP DEAL ANFRAGE\nID: {user.id}\n@{user.username or 'unknown'}"
             )
 
-            bot.send_message(
-                chat_id,
-                "🔥 Exklusiv – ein Admin wird sich in Kürze bei dir melden."
-            )
+            bot.send_message(chat_id, "🔥 Exklusiv – ein Admin meldet sich bald bei dir.")
             return
 
-        # ---------------- DAILY ----------------
+        # ---------------- DAILY PET ----------------
         if call.data == "daily_start":
 
             pets = ["🐶","🐱","🐺","🦊","🐵","🐸","🐼","🐉"]
@@ -151,28 +149,52 @@ def callback(call):
             bot.send_message(chat_id, "🐾 Tier wählen:", reply_markup=markup)
             return
 
-        # ---------------- PET ----------------
+        # ---------------- PET SELECT ----------------
         if call.data.startswith("pet_"):
 
             pet = call.data.split("_")[1]
-            pending_name[chat_id] = pet
+            pending_pet[chat_id] = pet
 
-            bot.send_message(chat_id, f"✨ Tier gewählt: {pet}\nJetzt Namen eingeben:")
+            bot.send_message(chat_id, f"✨ Tier: {pet}\nJetzt Name eingeben:")
             return
 
-        # ---------------- ACTION MENU AFTER NAME ----------------
+        # ---------------- PET ACTIONS ----------------
+        if call.data == "feed":
+            bot.send_message(chat_id, random.choice(["🍖 lecker", "😐 ok", "🤢 schlecht"]))
+            update_user(chat_id, {"daily_stage": 1})
+            return
+
+        if call.data == "walk":
+            bot.send_message(chat_id, random.choice(["🚶 unterwegs", "🌳 happy", "🎰 casino"]))
+            update_user(chat_id, {"daily_stage": 2})
+            return
+
+        if call.data == "play":
+
+            user = get_user(chat_id)
+
+            bot.send_message(chat_id, random.choice(["🎰 spin", "💰 win", "🔥 jackpot"]))
+
+            if user.get("daily_stage") == 2:
+                add_xp(chat_id, 3)
+                update_user(chat_id, {
+                    "last_daily": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                })
+                bot.send_message(chat_id, "🏆 +3 XP Daily abgeschlossen")
+            return
+
     except Exception as e:
         print("CALLBACK ERROR:", e)
 
-# ---------------- NAME INPUT ----------------
+# ---------------- TEXT INPUT (PET NAME) ----------------
 @bot.message_handler(func=lambda m: True)
 def text_handler(message):
 
     chat_id = message.chat.id
 
-    if chat_id in pending_name:
+    if chat_id in pending_pet:
 
-        pet = pending_name.pop(chat_id)
+        pet = pending_pet.pop(chat_id)
 
         update_user(chat_id, {
             "daily_pet": pet,
@@ -180,40 +202,13 @@ def text_handler(message):
             "daily_stage": 0
         })
 
-        pet_state[chat_id] = True
-
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("🍖 Füttern", callback_data="feed"))
         markup.add(types.InlineKeyboardButton("🚶 Spazieren", callback_data="walk"))
         markup.add(types.InlineKeyboardButton("🎰 Spielen", callback_data="play"))
 
         bot.send_message(chat_id, f"🐾 Dein Tier {message.text} ist bereit!", reply_markup=markup)
-
         return
-
-# ---------------- PET ACTIONS ----------------
-@bot.callback_query_handler(func=lambda call: call.data in ["feed","walk","play"])
-def pet_actions(call):
-
-    chat_id = call.message.chat.id
-
-    if call.data == "feed":
-        bot.send_message(chat_id, random.choice(["🍖 lecker", "😐 ok", "🤢 bäh"]))
-        update_user(chat_id, {"daily_stage": 1})
-
-    if call.data == "walk":
-        bot.send_message(chat_id, random.choice(["🚶 unterwegs", "🌳 happy", "🎰 casino vibes"]))
-        update_user(chat_id, {"daily_stage": 2})
-
-    if call.data == "play":
-        user = get_user(chat_id)
-
-        bot.send_message(chat_id, random.choice(["🎰 spin", "💰 win", "🔥 jackpot"]))
-
-        if user.get("daily_stage") == 2:
-            add_xp(chat_id, 3)
-            update_user(chat_id, {"last_daily": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
-            bot.send_message(chat_id, "🏆 +3 XP Daily Quest abgeschlossen")
 
 # ---------------- SCREENSHOT FIX ----------------
 @bot.message_handler(content_types=['photo'])
@@ -234,11 +229,11 @@ def screenshot(message):
     bot.send_photo(
         ADMIN_ID,
         message.photo[-1].file_id,
-        caption=f"Screenshot von {message.from_user.id}",
+        caption=f"📸 @{message.from_user.username or 'unknown'}\n💬 {message.caption or 'keine Notiz'}\n🕒 {datetime.now().strftime('%H:%M:%S')}",
         reply_markup=markup
     )
 
-# ---------------- XP CALLBACK FIX ----------------
+# ---------------- XP CONFIRM ----------------
 @bot.callback_query_handler(func=lambda call: call.data.startswith("xp_"))
 def xp_handler(call):
 
