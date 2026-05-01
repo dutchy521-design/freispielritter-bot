@@ -10,7 +10,7 @@ from supabase import create_client, Client
 import requests
 
 # =========================================================
-# 🔥 BOOT SAFETY CHECK (NEU – verhindert Railway "completed")
+# 🔥 BOOT SAFETY CHECK (UNVERÄNDERT + STABIL)
 # =========================================================
 
 print("=== BOT STARTING ===")
@@ -19,20 +19,17 @@ TOKEN = os.getenv("TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-ADMIN_ID_RAW = os.getenv("ADMIN_ID", "0")
-
 try:
-    ADMIN_ID = int(ADMIN_ID_RAW)
+    ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 except:
     ADMIN_ID = 0
 
-# ❌ HARD STOP wenn kritische ENV fehlen
 if not TOKEN:
-    print("❌ TOKEN fehlt → Bot stoppt")
+    print("❌ TOKEN fehlt")
     exit(1)
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    print("❌ SUPABASE fehlt → Bot stoppt")
+    print("❌ SUPABASE fehlt")
     exit(1)
 
 print("✔ ENV OK")
@@ -106,7 +103,7 @@ def run():
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 # =========================================================
-# 🔥 SAFE START (FIXED Railway + Telegram Stability)
+# 🔥 SAFE POLLING FIX (NUR HIER GEÄNDERT)
 # =========================================================
 
 def reset_telegram_state():
@@ -120,24 +117,26 @@ def reset_telegram_state():
     except:
         pass
 
-# ---------------- START BOT ----------------
 if __name__ == "__main__":
     try:
-        print("BOT BOOT MODE")
+        print("BOT BOOTING SAFE MODE")
 
-        # 🔥 verhindert Telegram 409 + alte Sessions
         reset_telegram_state()
 
-        # Flask parallel
         threading.Thread(target=run, daemon=True).start()
 
-        print("STARTING POLLING...")
+        print("STARTING SAFE POLLING LOOP")
 
-        bot.infinity_polling(
-            skip_pending=True,
-            timeout=30,
-            long_polling_timeout=30
-        )
+        # 🔥 FIX: stabiler restart-loop statt "Break infinity polling"
+        while True:
+            try:
+                bot.infinity_polling(
+                    skip_pending=True,
+                    timeout=30,
+                    long_polling_timeout=30
+                )
+            except Exception as e:
+                print("POLLING CRASH:", e)
 
     except Exception as e:
         print("FATAL ERROR:", e)
