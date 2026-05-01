@@ -5,7 +5,7 @@ import string
 from telebot import types
 from flask import Flask
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 from supabase import create_client, Client
 
 # ---------------- SUPABASE ----------------
@@ -28,6 +28,22 @@ def home():
 
 # ---------------- MEMORY ----------------
 pending_xp_requests = {}
+
+# ---------------- LEVEL NAMES ----------------
+def get_level_name(level):
+    levels = {
+        1: "🪙 Bettler-Ritter",
+        2: "🛡️ Schank-Ritter",
+        3: "⚔️ Eisen-Ritter",
+        4: "🐎 Turnier-Ritter",
+        5: "🏰 Burg-Ritter",
+        6: "👑 Casino-Champion",
+        7: "💎 Royal High Roller",
+        8: "🔥 Shadow Knight",
+        9: "⚡ Mythic Dealer",
+        10: "🏆 Legend of the Casino"
+    }
+    return levels.get(level, "🏆 Unsterblicher Ritter")
 
 # ---------------- HELPERS ----------------
 def generate_code():
@@ -57,7 +73,6 @@ def get_user(user_id):
 def update_user(user_id, fields):
     supabase.table("users").update(fields).eq("id", str(user_id)).execute()
 
-# ---------------- XP ----------------
 def add_xp(user_id, amount):
     user = get_user(user_id)
     xp = int(user.get("xp", 0)) + amount
@@ -77,7 +92,6 @@ def start(message):
 
     user = get_user(message.from_user.id)
 
-    # REF SYSTEM
     if ref and not user.get("used_ref"):
         ref_user_id = supabase.table("users").select("id").eq("ref_code", ref).execute()
 
@@ -109,7 +123,7 @@ def start(message):
         types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
     )
 
-    bot.send_message(message.chat.id, "🔞 Bist du 18?", reply_markup=markup)
+    bot.send_message(message.chat.id, "🔞 Bist du über 18 Jahre alt?", reply_markup=markup)
 
 # ---------------- CALLBACK ----------------
 CHANNEL = "@Freispielritter"
@@ -125,9 +139,9 @@ def callback(call):
 
     if call.data == "age_yes":
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("📢 Kanal", url="https://t.me/Freispielritter"))
-        markup.add(types.InlineKeyboardButton("✅ Bestätigen", callback_data="check_channel"))
-        bot.send_message(chat_id, "👉 Kanal beitreten:", reply_markup=markup)
+        markup.add(types.InlineKeyboardButton("📢 Zum Kanal", url="https://t.me/Freispielritter"))
+        markup.add(types.InlineKeyboardButton("✅ Ich bin beigetreten", callback_data="check_channel"))
+        bot.send_message(chat_id, "👉 Folgst du schon unserem Kanal?", reply_markup=markup)
         return
 
     if call.data == "check_channel":
@@ -144,56 +158,40 @@ def callback(call):
         ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
 
         markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🚀 Mini App", web_app=types.WebAppInfo("https://freispielritter.pages.dev/")))
+        markup.add(types.InlineKeyboardButton("📦 Deals öffnen", callback_data="open_deals"))
 
-        # 🚀 Mini App
-        markup.add(types.InlineKeyboardButton(
-            "🚀 Mini App",
-            web_app=types.WebAppInfo("https://freispielritter.pages.dev/")
-        ))
-
-        # 📦 Deals Button (NEU)
-        markup.add(types.InlineKeyboardButton(
-            "📦 Deals öffnen",
-            callback_data="open_deals"
-        ))
-
-        bot.send_message(chat_id, f"✅ Freigeschaltet\n\n🔗 {ref_link}", reply_markup=markup)
+        bot.send_message(
+            chat_id,
+            f"✅ Freigeschaltet\n\nHier dein persönlicher Einladungslink um XP und mehr zu verdienen:\n{ref_link}",
+            reply_markup=markup
+        )
         return
 
-    # 📦 DEALS MENÜ (NEU)
     if call.data == "open_deals":
 
         markup = types.InlineKeyboardMarkup()
 
-        markup.add(types.InlineKeyboardButton(
-            "🔥 Top Deal 😉",
-            callback_data="top_deal"
-        ))
-
-        markup.add(types.InlineKeyboardButton(
-            "🥇 Goldzino",
-            url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter&utm_campaign=freispielritter"
-        ))
-
-        markup.add(types.InlineKeyboardButton(
-            "🎁 Freispiele",
-            url="https://1f0s0.fit/r/XJTWVH25"
-        ))
-
-        markup.add(types.InlineKeyboardButton(
-            "💰 Crypto Casino",
-            url="https://t.me/tgcplaybot/?start=UsHEI0AGB"
-        ))
+        markup.add(types.InlineKeyboardButton("🔥 Top Deal 😉", callback_data="top_deal"))
+        markup.add(types.InlineKeyboardButton("🥇 Goldzino", url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter&utm_campaign=freispielritter"))
+        markup.add(types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25"))
+        markup.add(types.InlineKeyboardButton("💰 Crypto Casino", url="https://t.me/tgcplaybot/?start=UsHEI0AGB"))
 
         bot.send_message(chat_id, "🎰 Wähle deinen Deal:", reply_markup=markup)
         return
 
     if call.data == "top_deal":
-        bot.send_message(ADMIN_ID, f"Top Deal Anfrage von {call.from_user.id}")
-        bot.send_message(chat_id, "🔥 Anfrage gesendet!")
+        user = call.from_user
+        bot.send_message(
+            ADMIN_ID,
+            f"🔥 TOP DEAL ANFRAGE\n\n👤 ID: {user.id}\n🧑 @{user.username or 'unknown'}"
+        )
+        bot.send_message(
+            chat_id,
+            "🔥 Unsere Top Deals sind Exklusiv – ein Admin kümmert sich bald um deine Anfrage 😉"
+        )
         return
 
-    # XP JA
     if call.data.startswith("xp_yes_"):
         req_id = call.data.split("_")[2]
         data = pending_xp_requests.get(req_id)
@@ -229,6 +227,8 @@ def callback(call):
 def screenshot(message):
 
     note = message.caption or "Keine Notiz"
+    username = message.from_user.username or "unknown"
+    timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")
 
     req_id = str(message.message_id)
 
@@ -246,7 +246,7 @@ def screenshot(message):
     bot.send_photo(
         ADMIN_ID,
         message.photo[-1].file_id,
-        caption=f"{message.from_user.id}\n{note}",
+        caption=f"📸 Screenshot\n👤 @{username}\n🕒 {timestamp}\n\n💬 {note}",
         reply_markup=markup
     )
 
@@ -306,7 +306,10 @@ def top(message):
 @bot.message_handler(commands=["xp"])
 def xp(message):
     user = get_user(message.from_user.id)
-    bot.send_message(message.chat.id, f"XP: {user['xp']} | Level: {user['level']}")
+    bot.send_message(
+        message.chat.id,
+        f"⭐ XP: {user['xp']}\n🏆 Level: {user['level']}\n🎖 Rang: {get_level_name(user['level'])}"
+    )
 
 # ---------------- RUN ----------------
 def run():
