@@ -85,7 +85,7 @@ def add_xp(user_id, amount):
         "level": level
     })
 
-# ---------------- DAILY CORE LOGIC ----------------
+# ---------------- DAILY CORE ----------------
 def handle_daily(message):
     user = get_user(message.from_user.id)
 
@@ -132,14 +132,14 @@ def handle_daily(message):
         f"🎁 Daily abgeholt!\n🔥 Streak: {streak}/7\n⭐ +{xp_reward} XP"
     )
 
-# ---------------- DAILY HANDLER (COMMAND) ----------------
+# ---------------- DAILY HANDLER ----------------
 @bot.message_handler(commands=["daily"])
 def daily(message):
     handle_daily(message)
 
-# 🔥 FALLBACK falls Telegram Command nicht triggert
-@bot.message_handler(func=lambda message: message.text and message.text.lower().startswith("/daily"))
-def daily_fallback(message):
+# 🔥 HARD FALLBACK
+@bot.message_handler(func=lambda m: m.text and "/daily" in m.text.lower())
+def daily_force(message):
     handle_daily(message)
 
 # ---------------- START ----------------
