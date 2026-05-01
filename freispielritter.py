@@ -16,7 +16,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 TOKEN = os.getenv("TOKEN")
 
-# 🔥 SAFE ADMIN ID (kein Crash mehr)
 try:
     ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 except:
@@ -93,30 +92,33 @@ def run():
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 # =========================================================
-# 🔥 ONLY FIXED START SECTION (WICHTIG)
+# 🔥 ONLY FIXED START SECTION (409 CONFLICT FIX)
 # =========================================================
 
-def reset_webhook():
+def reset_telegram_state():
+    try:
+        bot.stop_polling()
+    except:
+        pass
+
     try:
         bot.remove_webhook()
-        print("Webhook entfernt (Safe Mode)")
-    except Exception as e:
-        print("Webhook Fehler:", e)
+    except:
+        pass
 
 # ---------------- START BOT ----------------
 if __name__ == "__main__":
     try:
-        print("BOT BOOTING...")
+        print("BOT BOOTING SAFE MODE...")
 
-        # 🔥 FIX 1: Webhook killen (verhindert Telegram Block)
-        reset_webhook()
+        # 🔥 FIX: alte Sessions killen (verhindert 409 Conflict)
+        reset_telegram_state()
 
-        # Flask Thread (unverändert)
+        # Flask parallel starten
         threading.Thread(target=run, daemon=True).start()
 
         print("STARTING TELEGRAM POLLING...")
 
-        # 🔥 FIX 2: stabiles polling
         bot.infinity_polling(
             skip_pending=True,
             timeout=30,
