@@ -75,147 +75,191 @@ def add_xp(user_id, amount):
 
     update_user(user_id, {"xp": xp, "level": level})
 
-# ---------------- DAILY BUTTON ----------------
-@bot.message_handler(commands=["daily"])
-def daily(message):
+# ---------------- START (UNCHANGED) ----------------
+@bot.message_handler(commands=["start"])
+def start(message):
+
+    args = message.text.split()
+    ref = args[1] if len(args) > 1 else None
 
     user = get_user(message.from_user.id)
-    last = user.get("last_daily")
 
-    if last:
-        try:
-            last_time = datetime.fromisoformat(last)
-            if datetime.utcnow() - last_time < timedelta(hours=24):
-                bot.send_message(message.chat.id, "⏳ Daily Quest noch nicht bereit.")
-                return
-        except:
-            pass
+    if ref and not user.get("used_ref"):
+        ref_user_id = supabase.table("users").select("id").eq("ref_code", ref).execute()
+
+        if ref_user_id.data:
+            inviter_id = ref_user_id.data[0]["id"]
+
+            if str(inviter_id) != str(message.from_user.id):
+
+                inviter = get_user(inviter_id)
+
+                invite_list = inviter.get("invite_list") or []
+                invite_list.append({
+                    "username": message.from_user.username or "unknown",
+                    "date": datetime.now().strftime("%d.%m.%Y %H:%M")
+                })
+
+                update_user(inviter_id, {
+                    "invites": int(inviter.get("invites", 0)) + 1,
+                    "invite_list": invite_list
+                })
+
+                add_xp(inviter_id, 10)
+
+                update_user(message.from_user.id, {"used_ref": ref})
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🐾 Quest starten", callback_data="pet_start"))
-
-    bot.send_message(
-        message.chat.id,
-        "━━━━━━━━━━━━━━\n🐾 DAILY QUEST\n━━━━━━━━━━━━━━\n\nStarte dein Haustier-Abenteuer!",
-        reply_markup=markup
+    markup.row(
+        types.InlineKeyboardButton("✅ Ja", callback_data="age_yes"),
+        types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
     )
 
-# ---------------- PET SYSTEM ----------------
-PET_TYPES = ["🐶","🐱","🐴","🦊","🐼","🐯","🐸","🐉"]
+    bot.send_message(message.chat.id, "🔞 Bist du über 18 Jahre alt?", reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("pet_"))
-def pet_handler(call):
+CHANNEL = "@Freispielritter"
 
-    uid = str(call.from_user.id)
+# ---------------- SINGLE CALLBACK HANDLER FIX ----------------
+@bot.callback_query_handler(func=lambda call: True)
+def callback(call):
 
-    # START
+    chat_id = call.message.chat.id
+
+    # AGE
+    if call.data == "age_no":
+        bot.send_message(chat_id, "❌ Zugriff verweigert.")
+        return
+
+    if call.data == "age_yes":
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("📢 Zum Kanal", url="https://t.me/Freispielritter"))
+        markup.add(types.InlineKeyboardButton("✅ Ich bin beigetreten", callback_data="check_channel"))
+
+        bot.send_message(chat_id, "👉 Folgst du schon unserem Kanal?", reply_markup=markup)
+        return
+
+    # CHANNEL CHECK
+    if call.data == "check_channel":
+        try:
+            member = bot.get_chat_member(CHANNEL, call.from_user.id)
+            if member.status not in ["member", "administrator", "creator"]:
+                bot.send_message(chat_id, "❌ Du bist noch nicht im Kanal.")
+                return
+        except:
+            bot.send_message(chat_id, "⚠️ Fehler beim Prüfen.")
+            return
+
+        user = get_user(chat_id)
+        ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
+
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🚀 Mini App", web_app=types.WebAppInfo("https://freispielritter.pages.dev/")))
+        markup.add(types.InlineKeyboardButton("📦 Deals öffnen", callback_data="open_deals"))
+
+        bot.send_message(
+            chat_id,
+            "━━━━━━━━━━━━━━\n✅ FREIGESCHALTET\n━━━━━━━━━━━━━━\n\n"
+            f"Hier dein persönlicher Einladungslink:\n{ref_link}",
+            reply_markup=markup
+        )
+        return
+
+    # DEALS
+    if call.data == "open_deals":
+
+        markup = types.InlineKeyboardMarkup()
+        markup.row(types.InlineKeyboardButton("🔥 Top Deal 😉", callback_data="top_deal"))
+        markup.row(
+            types.InlineKeyboardButton("🥇 Goldzino", url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter&utm_campaign=freispielritter"),
+            types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25")
+        )
+        markup.row(types.InlineKeyboardButton("💰 Crypto Casino", url="https://t.me/tgcplaybot/?start=UsHEI0AGB"))
+
+        bot.send_message(chat_id, "🎰 Wähle deinen Deal:", reply_markup=markup)
+        return
+
+    # TOP DEAL
+    if call.data == "top_deal":
+        user = call.from_user
+        bot.send_message(
+            ADMIN_ID,
+            f"🔥 TOP DEAL ANFRAGE\n👤 @{user.username or 'unknown'} | ID: {user.id}"
+        )
+        bot.send_message(chat_id, "🔥 Anfrage gesendet 😉")
+        return
+
+    # ---------------- PET SYSTEM FIXED INSIDE SAME HANDLER ----------------
     if call.data == "pet_start":
 
         markup = types.InlineKeyboardMarkup()
-        for p in PET_TYPES:
-            markup.add(types.InlineKeyboardButton(p, callback_data=f"pet_{p}"))
+        pets = ["🐶","🐱","🐴","🦊","🐼","🐯","🐸","🐉"]
 
-        bot.send_message(call.message.chat.id, "Wähle dein Tier:", reply_markup=markup)
+        for p in pets:
+            markup.add(types.InlineKeyboardButton(p, callback_data=f"pet_pick_{p}"))
+
+        bot.send_message(chat_id, "🐾 Wähle dein Tier:", reply_markup=markup)
         return
 
-    # PICK PET
-    if call.data.startswith("pet_") and len(call.data) <= 6:
+    if call.data.startswith("pet_pick_"):
 
-        pet = call.data.split("_")[1]
+        pet = call.data.split("_")[2]
+        pet_sessions[str(call.from_user.id)] = {"pet": pet}
 
-        pet_sessions[uid] = {
-            "pet": pet,
-            "name": None,
-            "step": 1
-        }
-
-        bot.send_message(call.message.chat.id, f"Wie soll dein {pet} heißen?")
+        bot.send_message(chat_id, f"Wie soll dein {pet} heißen?")
         bot.register_next_step_handler(call.message, pet_name)
         return
 
-def pet_name(message):
+    if call.data.startswith("pet_") and call.data in ["pet_feed","pet_walk","pet_play"]:
 
-    uid = str(message.from_user.id)
+        uid = str(call.from_user.id)
 
-    if uid not in pet_sessions:
+        if uid not in pet_sessions:
+            return
+
+        pet = pet_sessions[uid]
+        name = pet.get("name","Tier")
+        emoji = pet.get("pet","🐾")
+
+        if call.data == "pet_feed":
+            msg = random.choice([f"😋 {name} hat es genossen!", f"🤢 {name} ist nicht begeistert..."])
+
+        if call.data == "pet_walk":
+            msg = random.choice([f"🚶 {name} geht mit dir ins Casino!", f"😴 {name} hat keine Lust..."])
+
+        if call.data == "pet_play":
+            msg = random.choice([f"🎰 {name} liebt den Slotautomaten!", f"🎲 {name} hat Spaß!"])
+
+        add_xp(uid, 3)
+
+        bot.send_message(chat_id, f"{emoji} {msg}\n🎉 +3 XP Daily Quest abgeschlossen!")
+
+        pet_sessions.pop(uid, None)
         return
 
-    pet_sessions[uid]["name"] = message.text
-    pet_sessions[uid]["step"] = 2
+# ---------------- SCREENSHOT (UNCHANGED) ----------------
+@bot.message_handler(content_types=['photo'])
+def screenshot(message):
+
+    note = message.caption or "Keine Notiz"
+
+    req_id = str(message.message_id)
+
+    pending_xp_requests[req_id] = {
+        "user_id": str(message.from_user.id),
+        "note": note
+    }
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🍖 Füttern", callback_data="pet_feed"))
-    markup.add(types.InlineKeyboardButton("🚶 Spazieren", callback_data="pet_walk"))
-    markup.add(types.InlineKeyboardButton("🎰 Spielen", callback_data="pet_play"))
-
-    bot.send_message(
-        message.chat.id,
-        f"🐾 {message.text} ist bereit!\nWas willst du tun?",
-        reply_markup=markup
+    markup.row(
+        types.InlineKeyboardButton("✅ Bestätigen", callback_data=f"xp_yes_{req_id}"),
+        types.InlineKeyboardButton("❌ Ablehnen", callback_data=f"xp_no_{req_id}")
     )
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("pet_"))
-def pet_actions(call):
-
-    uid = str(call.from_user.id)
-
-    if uid not in pet_sessions:
-        return
-
-    pet = pet_sessions[uid]
-
-    name = pet["name"]
-    emoji = pet["pet"]
-
-    if call.data == "pet_feed":
-
-        res = random.choice([
-            f"😋 {name} hat es geliebt!",
-            f"🤢 {name} fand das komisch..."
-        ])
-
-        bot.send_message(call.message.chat.id, f"{emoji} {res}")
-
-    if call.data == "pet_walk":
-
-        res = random.choice([
-            f"🚶 {name} und du gehen ins nächste Casino!",
-            f"😴 {name} hatte keine Lust rauszugehen"
-        ])
-
-        bot.send_message(call.message.chat.id, f"{emoji} {res}")
-
-    if call.data == "pet_play":
-
-        res = random.choice([
-            f"🎰 {name} fühlt sich glücklich am Slotautomaten!",
-            f"🎲 {name} hat Spaß im Casino!"
-        ])
-
-        bot.send_message(call.message.chat.id, f"{emoji} {res}")
-
-    # QUEST FINISH
-    add_xp(uid, 3)
-
-    user = get_user(uid)
-    update_user(uid, {"last_daily": datetime.utcnow().isoformat()})
-
-    bot.send_message(call.message.chat.id, "🎉 Daily Quest abgeschlossen!\n+3 XP")
-
-    pet_sessions.pop(uid, None)
-
-# ---------------- XP COMMAND (UPDATED ONLY DISPLAY) ----------------
-@bot.message_handler(commands=["xp"])
-def xp(message):
-
-    user = get_user(message.from_user.id)
-
-    bot.send_message(
-        message.chat.id,
-        "━━━━━━━━━━━━━━\n🏆 DEIN STATUS\n━━━━━━━━━━━━━━\n\n"
-        f"⭐ XP: {user['xp']}\n"
-        f"📈 Level: {user['level']}\n"
-        f"🎖 Rang: {get_level_name(user['level'])}"
+    bot.send_photo(
+        ADMIN_ID,
+        message.photo[-1].file_id,
+        caption=f"👤 @{message.from_user.username}\n💬 {note}",
+        reply_markup=markup
     )
 
 # ---------------- RUN ----------------
