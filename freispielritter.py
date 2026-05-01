@@ -85,36 +85,43 @@ def add_xp(user_id, amount):
         "level": level
     })
 
-# ---------------- DAILY LOGIC (UNVERÄNDERT) ----------------
-def handle_daily(message):
+# ---------------- DAILY (NUR HIER NEU) ----------------
+@bot.message_handler(commands=["daily"])
+def daily(message):
+
     user = get_user(message.from_user.id)
 
     now = datetime.now()
-    last_daily = user.get("last_daily")
-    streak = int(user.get("daily_streak", 0))
+    last = user.get("last_daily")
+    streak = int(user.get("daily_streak") or 0)
 
-    try:
-        if last_daily:
-            last_daily_dt = datetime.strptime(last_daily, "%Y-%m-%d %H:%M:%S")
+    # wenn schon heute
+    if last:
+        try:
+            last_dt = datetime.strptime(last, "%Y-%m-%d %H:%M:%S")
 
-            if now.date() == last_daily_dt.date():
-                bot.send_message(message.chat.id, "⏳ Du hast dein Daily heute schon abgeholt!")
+            if now.date() == last_dt.date():
+                bot.send_message(message.chat.id, "⏳ Daily schon abgeholt heute!")
                 return
 
-            if now.date() == (last_daily_dt + timedelta(days=1)).date():
+            # streak check
+            if now.date() == (last_dt + timedelta(days=1)).date():
                 streak += 1
             else:
                 streak = 1
-        else:
+
+        except:
             streak = 1
-    except:
+    else:
         streak = 1
 
+    # max 7 loop
     if streak > 7:
         streak = 1
 
-    xp_reward = streak
-    add_xp(message.from_user.id, xp_reward)
+    xp_gain = streak
+
+    add_xp(message.from_user.id, xp_gain)
 
     update_user(message.from_user.id, {
         "daily_streak": streak,
@@ -123,19 +130,8 @@ def handle_daily(message):
 
     bot.send_message(
         message.chat.id,
-        f"🎁 Daily abgeholt!\n🔥 Streak: {streak}/7\n⭐ +{xp_reward} XP"
+        f"🎁 Daily abgeholt!\n🔥 Streak: {streak}/7\n⭐ +{xp_gain} XP"
     )
-
-# ---------------- DAILY FIX (WICHTIGER PART) ----------------
-
-@bot.message_handler(commands=["daily"])
-def daily_cmd(message):
-    handle_daily(message)
-
-# 🔥 HARD FALLBACK – Fängt ALLES ab, selbst wenn Command kaputt ist
-@bot.message_handler(func=lambda m: m.text and "daily" in m.text.lower())
-def daily_fallback(message):
-    handle_daily(message)
 
 # ---------------- START ----------------
 @bot.message_handler(commands=["start"])
@@ -179,8 +175,9 @@ def start(message):
 
     bot.send_message(message.chat.id, "🔞 Bist du über 18 Jahre alt?", reply_markup=markup)
 
-# ---------------- REST BLEIBT KOMPLETT UNVERÄNDERT ----------------
-# (alles wie bei dir original)
+# ---------------- REST IST 1:1 DEIN BACKUP ----------------
+# (kein einziges Wort geändert)
+
 # ---------------- RUN ----------------
 def run():
     app.run(host="0.0.0.0", port=8080)
