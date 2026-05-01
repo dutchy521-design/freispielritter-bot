@@ -77,7 +77,7 @@ def start(message):
 
     user = get_user(message.from_user.id)
 
-    # 👉 REF SYSTEM
+    # REF SYSTEM
     if ref and not user.get("used_ref"):
         ref_user_id = supabase.table("users").select("id").eq("ref_code", ref).execute()
 
@@ -103,7 +103,6 @@ def start(message):
 
                 update_user(message.from_user.id, {"used_ref": ref})
 
-    # 👉 ALTERSCHECK
     markup = types.InlineKeyboardMarkup()
     markup.add(
         types.InlineKeyboardButton("✅ Ja, ich bin 18+", callback_data="age_yes"),
@@ -146,14 +145,47 @@ def callback(call):
 
         markup = types.InlineKeyboardMarkup()
 
-        markup.add(types.InlineKeyboardButton("🚀 Mini App", web_app=types.WebAppInfo("https://freispielritter.pages.dev/")))
-        markup.add(types.InlineKeyboardButton("🔥 Top Deal 😉", callback_data="top_deal"))
+        # 🚀 Mini App
+        markup.add(types.InlineKeyboardButton(
+            "🚀 Mini App",
+            web_app=types.WebAppInfo("https://freispielritter.pages.dev/")
+        ))
 
-        markup.add(types.InlineKeyboardButton("🥇 Goldzino", url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter&utm_campaign=freispielritter"))
-        markup.add(types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25"))
-        markup.add(types.InlineKeyboardButton("💰 Crypto Casino", url="https://t.me/tgcplaybot/?start=UsHEI0AGB"))
+        # 📦 Deals Button (NEU)
+        markup.add(types.InlineKeyboardButton(
+            "📦 Deals öffnen",
+            callback_data="open_deals"
+        ))
 
         bot.send_message(chat_id, f"✅ Freigeschaltet\n\n🔗 {ref_link}", reply_markup=markup)
+        return
+
+    # 📦 DEALS MENÜ (NEU)
+    if call.data == "open_deals":
+
+        markup = types.InlineKeyboardMarkup()
+
+        markup.add(types.InlineKeyboardButton(
+            "🔥 Top Deal 😉",
+            callback_data="top_deal"
+        ))
+
+        markup.add(types.InlineKeyboardButton(
+            "🥇 Goldzino",
+            url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter&utm_campaign=freispielritter"
+        ))
+
+        markup.add(types.InlineKeyboardButton(
+            "🎁 Freispiele",
+            url="https://1f0s0.fit/r/XJTWVH25"
+        ))
+
+        markup.add(types.InlineKeyboardButton(
+            "💰 Crypto Casino",
+            url="https://t.me/tgcplaybot/?start=UsHEI0AGB"
+        ))
+
+        bot.send_message(chat_id, "🎰 Wähle deinen Deal:", reply_markup=markup)
         return
 
     if call.data == "top_deal":
@@ -161,7 +193,7 @@ def callback(call):
         bot.send_message(chat_id, "🔥 Anfrage gesendet!")
         return
 
-    # XP Bestätigung
+    # XP JA
     if call.data.startswith("xp_yes_"):
         req_id = call.data.split("_")[2]
         data = pending_xp_requests.get(req_id)
@@ -174,7 +206,6 @@ def callback(call):
 
         add_xp(user_id, 5)
 
-        # 👉 NUR HIER speichern
         supabase.table("notes").insert({
             "user_id": user_id,
             "note": note,
@@ -182,7 +213,6 @@ def callback(call):
         }).execute()
 
         bot.send_message(chat_id, "✅ Bestätigt")
-
         bot.send_message(user_id, "💳 Einzahlung bestätigt +5 XP")
 
         pending_xp_requests.pop(req_id, None)
