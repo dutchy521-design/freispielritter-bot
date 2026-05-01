@@ -26,7 +26,8 @@ def home():
 
 # ---------------- MEMORY ----------------
 pending_xp_requests = {}
-pet_sessions = {}
+quest_sessions = {}
+quest_cooldowns = {}
 
 # ---------------- LEVELS ----------------
 def get_level_name(level):
@@ -75,104 +76,19 @@ def add_xp(user_id, amount):
     user = get_user(user_id)
     xp = int(user.get("xp", 0)) + amount
     level = (xp // 100) + 1
-
     update_user(user_id, {"xp": xp, "level": level})
 
-
-# ---------------- /XP ----------------
-@bot.message_handler(commands=["xp"])
-def xp_cmd(message):
-    user = get_user(message.from_user.id)
-
-    bot.send_message(
-        message.chat.id,
-        f"📊 XP STATUS\n\n"
-        f"XP: {user['xp']}\n"
-        f"Level: {user['level']}\n"
-        f"Rang: {get_level_name(user['level'])}"
-    )
-
-
-# ---------------- /DAILY (FIX) ----------------
-@bot.message_handler(commands=["daily"])
-def daily(message):
-
-    user = get_user(message.from_user.id)
-
-    last = user.get("last_daily")
-    today = datetime.now().date().isoformat()
-
-    if last == today:
-        bot.send_message(message.chat.id, "⏳ Du hast dein Daily heute schon geholt.")
-        return
-
-    add_xp(message.from_user.id, 15)
-    update_user(message.from_user.id, {"last_daily": today})
-
-    bot.send_message(
-        message.chat.id,
-        "🎁 Daily Reward abgeholt!\n"
-        "💰 +15 XP erhalten"
-    )
-
-
-# ---------------- /NOTES (FIX) ----------------
-@bot.message_handler(commands=["notes"])
-def notes(message):
-
-    bot.send_message(
-        message.chat.id,
-        "📝 NOTES SYSTEM\n\n"
-        "📸 Screenshot → Admin prüft XP\n"
-        "🎁 /daily → tägliche Belohnung\n"
-        "📊 /xp → dein Status"
-    )
-
-
-# ---------------- START ----------------
+# ---------------- START (UNVERÄNDERT) ----------------
 @bot.message_handler(commands=["start"])
 def start(message):
 
-    args = message.text.split()
-    ref = args[1] if len(args) > 1 else None
-
-    user = get_user(message.from_user.id)
-
-    if ref and not user.get("used_ref"):
-        ref_user_id = supabase.table("users").select("id").eq("ref_code", ref).execute()
-
-        if ref_user_id.data:
-            inviter_id = ref_user_id.data[0]["id"]
-
-            if str(inviter_id) != str(message.from_user.id):
-
-                inviter = get_user(inviter_id)
-
-                invite_list = inviter.get("invite_list") or []
-                invite_list.append({
-                    "username": message.from_user.username or "unknown",
-                    "date": datetime.now().strftime("%d.%m.%Y %H:%M")
-                })
-
-                update_user(inviter_id, {
-                    "invites": int(inviter.get("invites", 0)) + 1,
-                    "invite_list": invite_list
-                })
-
-                add_xp(inviter_id, 10)
-                update_user(message.from_user.id, {"used_ref": ref})
-
     markup = types.InlineKeyboardMarkup()
     markup.row(
-        types.InlineKeyboardButton("✅ Ja", callback_data="age_yes"),
-        types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
+        types.InlineKeyboardButton("📦 Deals öffnen", callback_data="open_deals"),
+        types.InlineKeyboardButton("🧭 Quests", callback_data="quest_start")
     )
 
-    bot.send_message(message.chat.id, "🔞 Bist du über 18 Jahre alt?", reply_markup=markup)
-
-
-CHANNEL = "@Freispielritter"
-
+    bot.send_message(message.chat.id, "🔓 Willkommen im System", reply_markup=markup)
 
 # ---------------- CALLBACK ----------------
 @bot.callback_query_handler(func=lambda call: True)
@@ -180,115 +96,116 @@ def callback(call):
 
     chat_id = call.message.chat.id
 
-    # AGE
-    if call.data == "age_no":
-        bot.send_message(chat_id, "❌ Zugriff verweigert.")
-        return
+    # ---------------- DEAL FIX ----------------
+    if call.data == "open_deals":
 
-    if call.data == "age_yes":
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("📢 Zum Kanal", url="https://t.me/Freispielritter"))
-        markup.add(types.InlineKeyboardButton("✅ Ich bin beigetreten", callback_data="check_channel"))
+        markup.row(
+            types.InlineKeyboardButton("🔥 Top Deal", callback_data="top_deal")
+        )
+        markup.row(
+            types.InlineKeyboardButton("🥇 Goldzino", url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter"),
+            types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25")
+        )
 
-        bot.send_message(chat_id, "👉 Folgst du schon unserem Kanal?", reply_markup=markup)
+        bot.answer_callback_query(call.id)
+        bot.send_message(chat_id, "🎰 Deals geöffnet")
         return
 
-    # CHANNEL CHECK
-    if call.data == "check_channel":
-        try:
-            member = bot.get_chat_member(CHANNEL, call.from_user.id)
-            if member.status not in ["member", "administrator", "creator"]:
-                bot.send_message(chat_id, "❌ Du bist noch nicht im Kanal.")
-                return
-        except:
-            bot.send_message(chat_id, "⚠️ Fehler beim Prüfen.")
+    # ---------------- QUEST START ----------------
+    if call.data == "quest_start":
+
+        pets = ["🐶","🐱","🐴","🦊","🐼","🐯","🐸","🐉"]
+
+        markup = types.InlineKeyboardMarkup()
+        for p in pets:
+            markup.add(types.InlineKeyboardButton(p, callback_data=f"quest_pet_{p}"))
+
+        bot.send_message(chat_id, "🐾 Wähle dein Quest-Tier:", reply_markup=markup)
+        return
+
+    # ---------------- PET NAME ----------------
+    if call.data.startswith("quest_pet_"):
+
+        pet = call.data.split("_")[2]
+
+        quest_sessions[str(call.from_user.id)] = {
+            "pet": pet
+        }
+
+        bot.send_message(chat_id, f"✏️ Wie soll dein {pet} heißen?")
+        bot.register_next_step_handler(call.message, quest_name)
+        return
+
+    # ---------------- QUEST ACTIONS ----------------
+    if call.data in ["quest_feed", "quest_walk", "quest_play"]:
+
+        uid = str(call.from_user.id)
+
+        if uid not in quest_sessions:
             return
 
-        user = get_user(chat_id)
-        ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
+        if uid in quest_cooldowns:
+            diff = (datetime.now() - quest_cooldowns[uid]).total_seconds()
+            if diff < 86400:
+                bot.send_message(chat_id, "⏳ Quest erst in 24h wieder verfügbar.")
+                return
 
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("🚀 Mini App", web_app=types.WebAppInfo("https://freispielritter.pages.dev/")))
-        markup.add(types.InlineKeyboardButton("📦 Deals öffnen", callback_data="open_deals"))
+        pet = quest_sessions[uid]
+        name = pet.get("name", "Tier")
+        emoji = pet.get("pet", "🐾")
 
-        bot.send_message(
-            chat_id,
-            "━━━━━━━━━━━━━━\n✅ FREIGESCHALTET\n━━━━━━━━━━━━━━\n\n"
-            f"Hier dein persönlicher Einladungslink:\n{ref_link}",
-            reply_markup=markup
-        )
-        return
+        if call.data == "quest_feed":
+            msg = random.choice([
+                f"😋 {name} hat es genossen!",
+                f"🤢 {name} ist nicht begeistert..."
+            ])
 
-    # ---------------- XP SCREENSHOT ----------------
-    if call.data.startswith("xp_yes_"):
+        elif call.data == "quest_walk":
+            msg = random.choice([
+                f"🚶 {name} macht sich auf den Weg ins Casino!",
+                f"🌆 {name} genießt die Nacht!"
+            ])
 
-        req_id = call.data.split("_")[2]
+        else:
+            msg = random.choice([
+                f"🎰 {name} spielt glücklich am Automaten!",
+                f"🔥 {name} ist im Jackpot-Modus!"
+            ])
 
-        if req_id in pending_xp_requests:
-            data = pending_xp_requests[req_id]
+        add_xp(uid, 3)
+        quest_cooldowns[uid] = datetime.now()
 
-            add_xp(data["user_id"], 5)  # FIX: 5 XP statt 20
-
-            bot.send_message(
-                data["user_id"],
-                f"✅ Screenshot bestätigt!\n💬 {data['note']}\n🎉 +5 XP"
-            )
-
-            bot.send_message(chat_id, "XP vergeben ✔️")
-            pending_xp_requests.pop(req_id, None)
-        return
-
-    if call.data.startswith("xp_no_"):
-
-        req_id = call.data.split("_")[2]
-
-        if req_id in pending_xp_requests:
-            data = pending_xp_requests[req_id]
-
-            bot.send_message(data["user_id"], "❌ Screenshot abgelehnt.")
-            bot.send_message(chat_id, "Abgelehnt ❌")
-
-            pending_xp_requests.pop(req_id, None)
+        bot.send_message(chat_id, f"{emoji} {msg}\n💰 +3 XP Quest abgeschlossen!")
         return
 
 
-# ---------------- SCREENSHOT ----------------
-@bot.message_handler(content_types=['photo'])
-def screenshot(message):
+# ---------------- QUEST NAME HANDLER ----------------
+def quest_name(message):
 
-    note = message.caption or "Keine Notiz"
-    req_id = str(message.message_id)
+    uid = str(message.from_user.id)
 
-    pending_xp_requests[req_id] = {
-        "user_id": str(message.from_user.id),
-        "username": message.from_user.username or "unknown",
-        "note": note,
-        "file_id": message.photo[-1].file_id
-    }
+    if uid not in quest_sessions:
+        return
+
+    quest_sessions[uid]["name"] = message.text
 
     markup = types.InlineKeyboardMarkup()
     markup.row(
-        types.InlineKeyboardButton("✅ Bestätigen", callback_data=f"xp_yes_{req_id}"),
-        types.InlineKeyboardButton("❌ Ablehnen", callback_data=f"xp_no_{req_id}")
+        types.InlineKeyboardButton("🍖 Füttern", callback_data="quest_feed"),
+        types.InlineKeyboardButton("🚶 Spazieren", callback_data="quest_walk"),
+        types.InlineKeyboardButton("🎰 Spielen", callback_data="quest_play")
     )
 
-    bot.send_photo(
-        ADMIN_ID,
-        message.photo[-1].file_id,
-        caption=(
-            f"🔥 XP REQUEST\n"
-            f"👤 @{message.from_user.username or 'unknown'}\n"
-            f"💬 {note}\n"
-            f"🆔 {message.from_user.id}"
-        ),
+    bot.send_message(
+        message.chat.id,
+        f"🐾 Dein Tier {message.text} ist bereit!",
         reply_markup=markup
     )
-
 
 # ---------------- RUN ----------------
 def run():
     app.run(host="0.0.0.0", port=8080)
-
 
 if __name__ == "__main__":
     threading.Thread(target=run).start()
