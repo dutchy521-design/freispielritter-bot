@@ -1,4 +1,3 @@
-bot.remove_webhook()
 import telebot
 import os
 import random
@@ -19,6 +18,9 @@ TOKEN = os.getenv("TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 bot = telebot.TeleBot(TOKEN)
+
+# ---------------- WEBHOOK FIX ----------------
+bot.remove_webhook()
 
 # ---------------- FLASK ----------------
 app = Flask(__name__)
@@ -100,12 +102,10 @@ def daily(message):
         try:
             last_dt = datetime.strptime(last, "%Y-%m-%d %H:%M:%S")
 
-            # schon heute
             if now.date() == last_dt.date():
                 bot.send_message(message.chat.id, "⏳ Daily schon abgeholt!")
                 return
 
-            # streak check
             if now.date() == (last_dt + timedelta(days=1)).date():
                 streak += 1
             else:
