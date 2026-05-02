@@ -88,7 +88,7 @@ def add_xp(user_id, amount):
         "level": level
     })
 
-# ---------------- DAILY (ONLY ADDITION) ----------------
+# ---------------- DAILY ----------------
 @bot.message_handler(commands=["daily"])
 def daily(message):
 
@@ -317,54 +317,16 @@ def notes(message):
 
     bot.send_message(message.chat.id, text)
 
-# ---------------- REF ----------------
-@bot.message_handler(commands=["ref"])
-def ref(message):
-    user = get_user(message.from_user.id)
-    link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
-    bot.send_message(message.chat.id, f"🔗 {link}\n👥 {user.get('invites',0)} Invites")
-
-# ---------------- INVITES ----------------
-@bot.message_handler(commands=["invites"])
-def invites(message):
-    user = get_user(message.from_user.id)
-    lst = user.get("invite_list") or []
-
-    if not lst:
-        bot.send_message(message.chat.id, "Keine Invites")
-        return
-
-    text = ""
-    for i in lst:
-        text += f"@{i['username']} ({i['date']})\n"
-
-    bot.send_message(message.chat.id, text)
-
-# ---------------- TOP ----------------
-@bot.message_handler(commands=["top"])
-def top(message):
-
-    res = supabase.table("users").select("id,invites").order("invites", desc=True).limit(5).execute()
-
-    text = "🏆 Top:\n\n"
-    for i, u in enumerate(res.data, 1):
-        text += f"{i}. {str(u['id'])[:3]}*** - {u['invites']}\n"
-
-    bot.send_message(message.chat.id, text)
-
-# ---------------- XP ----------------
-@bot.message_handler(commands=["xp"])
-def xp(message):
-    user = get_user(message.from_user.id)
-    bot.send_message(
-        message.chat.id,
-        f"⭐ XP: {user['xp']}\n🏆 Level: {user['level']}\n🎖 Rang: {get_level_name(user['level'])}"
-    )
-
 # ---------------- RUN ----------------
 def run():
-    app.run(host="0.0.0.0", port=8080)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
+# ---------------- START BOT ----------------
 if __name__ == "__main__":
+    import sys
+
+    if os.getenv("RUN_MAIN") == "true":
+        sys.exit()
+
     threading.Thread(target=run).start()
-    bot.infinity_polling()
+    bot.infinity_polling(skip_pending=True, timeout=30)
