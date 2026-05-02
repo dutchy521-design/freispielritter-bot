@@ -1,3 +1,4 @@
+bot.remove_webhook()
 import telebot
 import os
 import random
