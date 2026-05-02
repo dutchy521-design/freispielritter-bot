@@ -7,6 +7,7 @@ from flask import Flask
 import threading
 from datetime import datetime, timedelta
 from supabase import create_client, Client
+import time
 
 # ---------------- SUPABASE ----------------
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -19,7 +20,14 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 bot = telebot.TeleBot(TOKEN)
 
-# ---------------- WEBHOOK FIX ----------------
+# ---------------- SAFETY FIX (409 PROTECTION) ----------------
+# sorgt dafür, dass keine alte polling-session aktiv bleibt
+try:
+    bot.stop_polling()
+except:
+    pass
+
+time.sleep(1)
 bot.remove_webhook()
 
 # ---------------- FLASK ----------------
@@ -88,17 +96,14 @@ def add_xp(user_id, amount):
         "level": level
     })
 
-# ---------------- XP COMMAND (FIX) ----------------
+# ---------------- XP COMMAND FIX ----------------
 @bot.message_handler(commands=["xp"])
 def xp(message):
     user = get_user(message.from_user.id)
 
-    xp = int(user.get("xp", 0))
-    level = int(user.get("level", 1))
-
     bot.send_message(
         message.chat.id,
-        f"⭐ XP: {xp}\n🏆 Level: {level}\n🎖 Rang: {get_level_name(level)}"
+        f"⭐ XP: {user.get('xp', 0)}\n🏆 Level: {user.get('level', 1)}\n🎖 Rang: {get_level_name(user.get('level', 1))}"
     )
 
 # ---------------- DAILY ----------------
@@ -188,7 +193,49 @@ def start(message):
 
     bot.send_message(message.chat.id, "🔞 Bist du über 18 Jahre alt?", reply_markup=markup)
 
-# ---------------- RUN ----------------
+# ---------------- CALLBACK (UNCHANGED LOGIC) ----------------
+CHANNEL = "@Freispielritter"
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback(call):
+
+    chat_id = call.message.chat.id
+
+    if call.data == "age_no":
+        bot.send_message(chat_id, "❌ Kein Zugriff.")
+        return
+
+    if call.data == "age_yes":
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("📢 Zum Kanal", url="https://t.me/Freispielritter"))
+        markup.add(types.InlineKeyboardButton("✅ Ich bin beigetreten", callback_data="check_channel"))
+        bot.send_message(chat_id, "👉 Folgst du schon unserem Kanal?", reply_markup=markup)
+        return
+
+    if call.data == "check_channel":
+        try:
+            member = bot.get_chat_member(CHANNEL, call.from_user.id)
+            if member.status not in ["member", "administrator", "creator"]:
+                bot.send_message(chat_id, "❌ Nicht im Kanal.")
+                return
+        except:
+            bot.send_message(chat_id, "⚠️ Fehler.")
+            return
+
+        user = get_user(chat_id)
+        ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
+
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🚀 Mini App", web_app=types.WebAppInfo("https://freispielritter.pages.dev/")))
+        markup.add(types.InlineKeyboardButton("📦 Deals öffnen", callback_data="open_deals"))
+
+        bot.send_message(chat_id,
+            f"✅ Freigeschaltet\n\nHier dein persönlicher Einladungslink:\n{ref_link}",
+            reply_markup=markup
+        )
+        return
+
+# ---------------- RUN SAFE ----------------
 def run():
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
@@ -199,4 +246,11 @@ if __name__ == "__main__":
         sys.exit()
 
     threading.Thread(target=run).start()
-    bot.infinity_polling(skip_pending=True, timeout=30)
+
+    # stabiler polling start (verhindert 409 loops)
+    while True:
+        try:
+            bot.infinity_polling(skip_pending=True, timeout=30)
+        except Exception as e:
+            print("BOT RESTART:", e)
+            time.sleep(3)
