@@ -3,11 +3,10 @@ import os
 import random
 import string
 from telebot import types
-from flask import Flask
+from flask import Flask, request
 import threading
 from datetime import datetime, timedelta
 from supabase import create_client, Client
-import time
 
 # ---------------- SUPABASE ----------------
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -17,18 +16,9 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 # ---------------- ENV ----------------
 TOKEN = os.getenv("TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # <-- wichtig
 
-bot = telebot.TeleBot(TOKEN)
-
-# ---------------- SAFETY FIX (409 PROTECTION) ----------------
-# sorgt dafür, dass keine alte polling-session aktiv bleibt
-try:
-    bot.stop_polling()
-except:
-    pass
-
-time.sleep(1)
-bot.remove_webhook()
+bot = telebot.TeleBot(TOKEN, threaded=False)
 
 # ---------------- FLASK ----------------
 app = Flask(__name__)
@@ -96,7 +86,7 @@ def add_xp(user_id, amount):
         "level": level
     })
 
-# ---------------- XP COMMAND FIX ----------------
+# ---------------- XP ----------------
 @bot.message_handler(commands=["xp"])
 def xp(message):
     user = get_user(message.from_user.id)
@@ -146,10 +136,7 @@ def daily(message):
         "last_daily": now.strftime("%Y-%m-%d %H:%M:%S")
     })
 
-    bot.send_message(
-        message.chat.id,
-        f"🎁 Daily abgeholt!\n🔥 Streak: {streak}/7\n⭐ +{xp_gain} XP"
-    )
+    bot.send_message(message.chat.id, f"🎁 Daily abgeholt!\n🔥 Streak: {streak}/7\n⭐ +{xp_gain} XP")
 
 # ---------------- START ----------------
 @bot.message_handler(commands=["start"])
@@ -193,7 +180,7 @@ def start(message):
 
     bot.send_message(message.chat.id, "🔞 Bist du über 18 Jahre alt?", reply_markup=markup)
 
-# ---------------- CALLBACK (UNCHANGED LOGIC) ----------------
+# ---------------- CALLBACK (DEIN ORIGINAL BLEIBT LOGISCH GLEICH) ----------------
 CHANNEL = "@Freispielritter"
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -230,27 +217,23 @@ def callback(call):
         markup.add(types.InlineKeyboardButton("📦 Deals öffnen", callback_data="open_deals"))
 
         bot.send_message(chat_id,
-            f"✅ Freigeschaltet\n\nHier dein persönlicher Einladungslink:\n{ref_link}",
+            f"✅ Freigeschaltet\n\nLink:\n{ref_link}",
             reply_markup=markup
         )
-        return
 
-# ---------------- RUN SAFE ----------------
+# ---------------- WEBHOOK ENTRYPOINT ----------------
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    json_str = request.get_data().decode("UTF-8")
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return "OK", 200
+
+# ---------------- START SERVER ----------------
 def run():
+    bot.remove_webhook()
+    bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
 if __name__ == "__main__":
-    import sys
-
-    if os.getenv("RUN_MAIN") == "true":
-        sys.exit()
-
-    threading.Thread(target=run).start()
-
-    # stabiler polling start (verhindert 409 loops)
-    while True:
-        try:
-            bot.infinity_polling(skip_pending=True, timeout=30)
-        except Exception as e:
-            print("BOT RESTART:", e)
-            time.sleep(3)
+    run()
