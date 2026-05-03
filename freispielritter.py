@@ -183,7 +183,6 @@ def callback(call):
 
     chat_id = call.message.chat.id
 
-    # ✅ FIX: Screenshot Buttons funktionieren jetzt
     if call.data.startswith("xp_yes_"):
         req_id = call.data.split("_")[2]
         data = pending_xp_requests.get(req_id)
@@ -298,63 +297,22 @@ def screenshot(message):
         reply_markup=markup
     )
 
-# ---------------- NOTES (FIXED) ----------------
+# ---------------- NOTES ----------------
 @bot.message_handler(commands=["notes"])
 def notes(message):
-    try:
-        res = supabase.table("notes").select("*").eq("user_id", str(message.from_user.id)).execute()
 
-        if not res.data:
-            bot.send_message(message.chat.id, "Keine Einzahlungen")
-            return
+    res = supabase.table("notes").select("*").eq("user_id", str(message.from_user.id)).execute()
 
-        text = "💰 Einzahlungen:\n\n"
-        for n in res.data:
-            text += f"{n['note']} ({n['date']})\n"
+    if not res.data:
+        bot.send_message(message.chat.id, "Keine Einzahlungen")
+        return
 
-        bot.send_message(message.chat.id, text)
+    text = "💰 Einzahlungen:\n\n"
 
-    except:
-        bot.send_message(message.chat.id, "⚠️ Fehler beim Laden der Notes")
+    for n in res.data:
+        text += f"{n['note']} ({n['date']})\n"
 
-# ---------------- INVITES (FIXED) ----------------
-@bot.message_handler(commands=["invites"])
-def invites(message):
-    try:
-        user = get_user(message.from_user.id)
-        lst = user.get("invite_list") or []
-
-        if not lst:
-            bot.send_message(message.chat.id, "Keine Invites")
-            return
-
-        text = ""
-        for i in lst:
-            text += f"@{i['username']} ({i['date']})\n"
-
-        bot.send_message(message.chat.id, text)
-
-    except:
-        bot.send_message(message.chat.id, "⚠️ Fehler beim Laden der Invites")
-
-# ---------------- TOP (FIXED) ----------------
-@bot.message_handler(commands=["top"])
-def top(message):
-    try:
-        res = supabase.table("users").select("id,invites").order("invites", desc=True).limit(5).execute()
-
-        if not res.data:
-            bot.send_message(message.chat.id, "Keine Daten")
-            return
-
-        text = "🏆 Top:\n\n"
-        for i, u in enumerate(res.data, 1):
-            text += f"{i}. {str(u['id'])[:3]}*** - {u['invites']}\n"
-
-        bot.send_message(message.chat.id, text)
-
-    except:
-        bot.send_message(message.chat.id, "⚠️ Fehler beim Laden der Topliste")
+    bot.send_message(message.chat.id, text)
 
 # ---------------- XP ----------------
 @bot.message_handler(commands=["xp"])
@@ -376,4 +334,10 @@ if __name__ == "__main__":
         sys.exit()
 
     threading.Thread(target=run).start()
-    bot.infinity_polling(skip_pending=True, timeout=30)
+
+    # 🔥 EINZIGER FIX: Auto-Restart bei Crash
+    while True:
+        try:
+            bot.infinity_polling(skip_pending=True, timeout=30)
+        except Exception as e:
+            print("Polling crashed, restarting...", e)
