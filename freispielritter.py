@@ -183,7 +183,7 @@ def callback(call):
 
     chat_id = call.message.chat.id
 
-    # ----------- FIXED PART (XP BUTTONS) -----------
+    # ✅ FIX: Screenshot Buttons funktionieren jetzt
     if call.data.startswith("xp_yes_"):
         req_id = call.data.split("_")[2]
         data = pending_xp_requests.get(req_id)
@@ -214,7 +214,6 @@ def callback(call):
         pending_xp_requests.pop(req_id, None)
         bot.answer_callback_query(call.id, "❌ Abgelehnt")
         return
-    # ----------- END FIX -----------
 
     if call.data == "age_no":
         bot.send_message(chat_id, "❌ Kein Zugriff.")
@@ -297,6 +296,73 @@ def screenshot(message):
         message.photo[-1].file_id,
         caption=f"📸 Screenshot\n👤 @{username}\n🕒 {timestamp}\n\n💬 {note}",
         reply_markup=markup
+    )
+
+# ---------------- NOTES (FIXED) ----------------
+@bot.message_handler(commands=["notes"])
+def notes(message):
+    try:
+        res = supabase.table("notes").select("*").eq("user_id", str(message.from_user.id)).execute()
+
+        if not res.data:
+            bot.send_message(message.chat.id, "Keine Einzahlungen")
+            return
+
+        text = "💰 Einzahlungen:\n\n"
+        for n in res.data:
+            text += f"{n['note']} ({n['date']})\n"
+
+        bot.send_message(message.chat.id, text)
+
+    except:
+        bot.send_message(message.chat.id, "⚠️ Fehler beim Laden der Notes")
+
+# ---------------- INVITES (FIXED) ----------------
+@bot.message_handler(commands=["invites"])
+def invites(message):
+    try:
+        user = get_user(message.from_user.id)
+        lst = user.get("invite_list") or []
+
+        if not lst:
+            bot.send_message(message.chat.id, "Keine Invites")
+            return
+
+        text = ""
+        for i in lst:
+            text += f"@{i['username']} ({i['date']})\n"
+
+        bot.send_message(message.chat.id, text)
+
+    except:
+        bot.send_message(message.chat.id, "⚠️ Fehler beim Laden der Invites")
+
+# ---------------- TOP (FIXED) ----------------
+@bot.message_handler(commands=["top"])
+def top(message):
+    try:
+        res = supabase.table("users").select("id,invites").order("invites", desc=True).limit(5).execute()
+
+        if not res.data:
+            bot.send_message(message.chat.id, "Keine Daten")
+            return
+
+        text = "🏆 Top:\n\n"
+        for i, u in enumerate(res.data, 1):
+            text += f"{i}. {str(u['id'])[:3]}*** - {u['invites']}\n"
+
+        bot.send_message(message.chat.id, text)
+
+    except:
+        bot.send_message(message.chat.id, "⚠️ Fehler beim Laden der Topliste")
+
+# ---------------- XP ----------------
+@bot.message_handler(commands=["xp"])
+def xp(message):
+    user = get_user(message.from_user.id)
+    bot.send_message(
+        message.chat.id,
+        f"⭐ XP: {user['xp']}\n🏆 Level: {user['level']}\n🎖 Rang: {get_level_name(user['level'])}"
     )
 
 # ---------------- RUN ----------------
