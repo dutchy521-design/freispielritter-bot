@@ -3,7 +3,7 @@ import os
 import random
 import string
 from telebot import types
-from flask import Flask, request
+from flask import Flask
 import threading
 from datetime import datetime, timedelta
 from supabase import create_client, Client
@@ -16,9 +16,11 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 # ---------------- ENV ----------------
 TOKEN = os.getenv("TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-bot = telebot.TeleBot(TOKEN, threaded=False)
+bot = telebot.TeleBot(TOKEN)
+
+# ---------------- WEBHOOK FIX ----------------
+bot.remove_webhook()
 
 # ---------------- FLASK ----------------
 app = Flask(__name__)
@@ -86,22 +88,13 @@ def add_xp(user_id, amount):
         "level": level
     })
 
-# ---------------- XP ----------------
-@bot.message_handler(commands=["xp"])
-def xp(message):
-    user = get_user(message.from_user.id)
-    bot.send_message(
-        message.chat.id,
-        f"⭐ XP: {user.get('xp',0)}\n🏆 Level: {user.get('level',1)}\n🎖 {get_level_name(user.get('level',1))}"
-    )
-
 # ---------------- DAILY ----------------
 @bot.message_handler(commands=["daily"])
 def daily(message):
 
     user = get_user(message.from_user.id)
-    now = datetime.now()
 
+    now = datetime.now()
     last = user.get("last_daily")
     streak = int(user.get("daily_streak") or 0)
 
@@ -117,6 +110,7 @@ def daily(message):
                 streak += 1
             else:
                 streak = 1
+
         except:
             streak = 1
     else:
@@ -125,14 +119,19 @@ def daily(message):
     if streak > 7:
         streak = 1
 
-    add_xp(message.from_user.id, streak)
+    xp_gain = streak
+
+    add_xp(message.from_user.id, xp_gain)
 
     update_user(message.from_user.id, {
         "daily_streak": streak,
         "last_daily": now.strftime("%Y-%m-%d %H:%M:%S")
     })
 
-    bot.send_message(message.chat.id, f"🎁 Daily +{streak} XP")
+    bot.send_message(
+        message.chat.id,
+        f"🎁 Daily abgeholt!\n🔥 Streak: {streak}/7\n⭐ +{xp_gain} XP"
+    )
 
 # ---------------- START ----------------
 @bot.message_handler(commands=["start"])
@@ -144,27 +143,28 @@ def start(message):
     user = get_user(message.from_user.id)
 
     if ref and not user.get("used_ref"):
-        ref_user = supabase.table("users").select("id").eq("ref_code", ref).execute()
+        ref_user_id = supabase.table("users").select("id").eq("ref_code", ref).execute()
 
-        if ref_user.data:
-            inviter_id = ref_user.data[0]["id"]
+        if ref_user_id.data:
+            inviter_id = ref_user_id.data[0]["id"]
 
             if str(inviter_id) != str(message.from_user.id):
 
                 inviter = get_user(inviter_id)
-                invites = inviter.get("invite_list") or []
 
-                invites.append({
+                invite_list = inviter.get("invite_list") or []
+                invite_list.append({
                     "username": message.from_user.username or "unknown",
                     "date": datetime.now().strftime("%d.%m.%Y %H:%M")
                 })
 
                 update_user(inviter_id, {
                     "invites": int(inviter.get("invites", 0)) + 1,
-                    "invite_list": invites
+                    "invite_list": invite_list
                 })
 
                 add_xp(inviter_id, 10)
+
                 update_user(message.from_user.id, {"used_ref": ref})
 
     markup = types.InlineKeyboardMarkup()
@@ -173,9 +173,9 @@ def start(message):
         types.InlineKeyboardButton("❌ Nein", callback_data="age_no")
     )
 
-    bot.send_message(message.chat.id, "🔞 Bist du über 18?", reply_markup=markup)
+    bot.send_message(message.chat.id, "🔞 Bist du über 18 Jahre alt?", reply_markup=markup)
 
-# ---------------- CALLBACK + DEALS + TOP + SCREENSHOT ----------------
+# ---------------- CALLBACK ----------------
 CHANNEL = "@Freispielritter"
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -189,80 +189,63 @@ def callback(call):
 
     if call.data == "age_yes":
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("📢 Kanal", url="https://t.me/Freispielritter"))
+        markup.add(types.InlineKeyboardButton("📢 Zum Kanal", url="https://t.me/Freispielritter"))
         markup.add(types.InlineKeyboardButton("✅ Ich bin beigetreten", callback_data="check_channel"))
-
-        bot.send_message(chat_id, "👉 Kanal beitreten", reply_markup=markup)
+        bot.send_message(chat_id, "👉 Folgst du schon unserem Kanal?", reply_markup=markup)
         return
 
     if call.data == "check_channel":
-
-        member = bot.get_chat_member(CHANNEL, call.from_user.id)
-        if member.status not in ["member","administrator","creator"]:
-            bot.send_message(chat_id, "❌ Nicht im Kanal")
+        try:
+            member = bot.get_chat_member(CHANNEL, call.from_user.id)
+            if member.status not in ["member", "administrator", "creator"]:
+                bot.send_message(chat_id, "❌ Nicht im Kanal.")
+                return
+        except:
+            bot.send_message(chat_id, "⚠️ Fehler.")
             return
 
         user = get_user(chat_id)
-
         ref_link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
 
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("🚀 Mini App", web_app=types.WebAppInfo("https://freispielritter.pages.dev/")))
-        markup.add(types.InlineKeyboardButton("📦 Deals", callback_data="open_deals"))
+        markup.add(types.InlineKeyboardButton("📦 Deals öffnen", callback_data="open_deals"))
 
-        bot.send_message(chat_id, f"✅ Freigeschaltet\n{ref_link}", reply_markup=markup)
+        bot.send_message(
+            chat_id,
+            f"✅ Freigeschaltet\n\nHier dein persönlicher Einladungslink:\n{ref_link}",
+            reply_markup=markup
+        )
         return
 
     if call.data == "open_deals":
 
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("🔥 Top Deal", callback_data="top_deal"))
-        markup.add(types.InlineKeyboardButton("🥇 Goldzino", url="https://track.stormaffiliates.com/visit/?bta=35714"))
+        markup.add(types.InlineKeyboardButton("🔥 Top Deal 😉", callback_data="top_deal"))
+        markup.add(types.InlineKeyboardButton("🥇 Goldzino", url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter&utm_campaign=freispielritter"))
         markup.add(types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25"))
         markup.add(types.InlineKeyboardButton("💰 Crypto Casino", url="https://t.me/tgcplaybot/?start=UsHEI0AGB"))
 
-        bot.send_message(chat_id, "🎰 Deals:", reply_markup=markup)
+        bot.send_message(chat_id, "🎰 Wähle deinen Deal:", reply_markup=markup)
         return
 
     if call.data == "top_deal":
-        bot.send_message(ADMIN_ID, f"🔥 TOP DEAL\nUser: {call.from_user.id}")
-        bot.send_message(chat_id, "🔥 Anfrage gesendet")
+        user = call.from_user
+        bot.send_message(
+            ADMIN_ID,
+            f"🔥 TOP DEAL ANFRAGE\n\n👤 ID: {user.id}\n🧑 @{user.username or 'unknown'}"
+        )
+        bot.send_message(chat_id, "🔥 Anfrage gesendet 😉")
         return
-
-    if call.data.startswith("xp_yes_"):
-
-        req_id = call.data.split("_")[2]
-        data = pending_xp_requests.get(req_id)
-
-        if not data:
-            return
-
-        user_id = data["user_id"]
-        note = data["note"]
-
-        add_xp(user_id, 5)
-
-        supabase.table("notes").insert({
-            "user_id": user_id,
-            "note": note,
-            "date": datetime.now().strftime("%d.%m.%Y %H:%M")
-        }).execute()
-
-        bot.send_message(chat_id, "✅ bestätigt")
-        bot.send_message(user_id, "💳 +5 XP")
-
-        pending_xp_requests.pop(req_id, None)
-        return
-
-    if call.data.startswith("xp_no_"):
-        pending_xp_requests.pop(call.data.split("_")[2], None)
-        bot.send_message(chat_id, "❌ abgelehnt")
 
 # ---------------- SCREENSHOT ----------------
-@bot.message_handler(content_types=["photo"])
+@bot.message_handler(content_types=['photo'])
 def screenshot(message):
 
-    note = message.caption or "keine notiz"
+    note = message.caption or "Keine Notiz"
+    username = message.from_user.username or "unknown"
+    timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")
+
     req_id = str(message.message_id)
 
     pending_xp_requests[req_id] = {
@@ -279,21 +262,86 @@ def screenshot(message):
     bot.send_photo(
         ADMIN_ID,
         message.photo[-1].file_id,
-        caption=f"📸 Screenshot\n@{message.from_user.username}\n💬 {note}",
+        caption=f"📸 Screenshot\n👤 @{username}\n🕒 {timestamp}\n\n💬 {note}",
         reply_markup=markup
     )
 
-# ---------------- WEBHOOK ----------------
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    update = telebot.types.Update.de_json(request.stream.read().decode("utf-8"))
-    bot.process_new_updates([update])
-    return "ok", 200
+# ---------------- NOTES (FIXED) ----------------
+@bot.message_handler(commands=["notes"])
+def notes(message):
+    try:
+        res = supabase.table("notes").select("*").eq("user_id", str(message.from_user.id)).execute()
 
+        if not res.data:
+            bot.send_message(message.chat.id, "Keine Einzahlungen")
+            return
+
+        text = "💰 Einzahlungen:\n\n"
+        for n in res.data:
+            text += f"{n['note']} ({n['date']})\n"
+
+        bot.send_message(message.chat.id, text)
+
+    except:
+        bot.send_message(message.chat.id, "⚠️ Fehler beim Laden der Notes")
+
+# ---------------- INVITES (FIXED) ----------------
+@bot.message_handler(commands=["invites"])
+def invites(message):
+    try:
+        user = get_user(message.from_user.id)
+        lst = user.get("invite_list") or []
+
+        if not lst:
+            bot.send_message(message.chat.id, "Keine Invites")
+            return
+
+        text = ""
+        for i in lst:
+            text += f"@{i['username']} ({i['date']})\n"
+
+        bot.send_message(message.chat.id, text)
+
+    except:
+        bot.send_message(message.chat.id, "⚠️ Fehler beim Laden der Invites")
+
+# ---------------- TOP (FIXED) ----------------
+@bot.message_handler(commands=["top"])
+def top(message):
+    try:
+        res = supabase.table("users").select("id,invites").order("invites", desc=True).limit(5).execute()
+
+        if not res.data:
+            bot.send_message(message.chat.id, "Keine Daten")
+            return
+
+        text = "🏆 Top:\n\n"
+        for i, u in enumerate(res.data, 1):
+            text += f"{i}. {str(u['id'])[:3]}*** - {u['invites']}\n"
+
+        bot.send_message(message.chat.id, text)
+
+    except:
+        bot.send_message(message.chat.id, "⚠️ Fehler beim Laden der Topliste")
+
+# ---------------- XP ----------------
+@bot.message_handler(commands=["xp"])
+def xp(message):
+    user = get_user(message.from_user.id)
+    bot.send_message(
+        message.chat.id,
+        f"⭐ XP: {user['xp']}\n🏆 Level: {user['level']}\n🎖 Rang: {get_level_name(user['level'])}"
+    )
+
+# ---------------- RUN ----------------
 def run():
-    bot.remove_webhook()
-    bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
 if __name__ == "__main__":
-    run()
+    import sys
+
+    if os.getenv("RUN_MAIN") == "true":
+        sys.exit()
+
+    threading.Thread(target=run).start()
+    bot.infinity_polling(skip_pending=True, timeout=30)
