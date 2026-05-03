@@ -19,6 +19,9 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 bot = telebot.TeleBot(TOKEN)
 
+# ---------------- WEBHOOK FIX ----------------
+bot.remove_webhook()
+
 # ---------------- FLASK ----------------
 app = Flask(__name__)
 
@@ -85,7 +88,7 @@ def add_xp(user_id, amount):
         "level": level
     })
 
-# ---------------- DAILY (ONLY ADDITION) ----------------
+# ---------------- DAILY ----------------
 @bot.message_handler(commands=["daily"])
 def daily(message):
 
@@ -99,12 +102,10 @@ def daily(message):
         try:
             last_dt = datetime.strptime(last, "%Y-%m-%d %H:%M:%S")
 
-            # schon heute
             if now.date() == last_dt.date():
                 bot.send_message(message.chat.id, "⏳ Daily schon abgeholt!")
                 return
 
-            # streak check
             if now.date() == (last_dt + timedelta(days=1)).date():
                 streak += 1
             else:
@@ -212,7 +213,7 @@ def callback(call):
 
         bot.send_message(
             chat_id,
-            f"✅ Freigeschaltet\n\nHier dein persönlicher Einladungslink um XP und mehr zu verdienen:\n{ref_link}",
+            f"✅ Freigeschaltet\n\nHier dein persönlicher Einladungslink:\n{ref_link}",
             reply_markup=markup
         )
         return
@@ -220,7 +221,6 @@ def callback(call):
     if call.data == "open_deals":
 
         markup = types.InlineKeyboardMarkup()
-
         markup.add(types.InlineKeyboardButton("🔥 Top Deal 😉", callback_data="top_deal"))
         markup.add(types.InlineKeyboardButton("🥇 Goldzino", url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter&utm_campaign=freispielritter"))
         markup.add(types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25"))
@@ -235,40 +235,7 @@ def callback(call):
             ADMIN_ID,
             f"🔥 TOP DEAL ANFRAGE\n\n👤 ID: {user.id}\n🧑 @{user.username or 'unknown'}"
         )
-        bot.send_message(
-            chat_id,
-            "🔥 Unsere Top Deals sind Exklusiv – ein Admin kümmert sich bald um deine Anfrage 😉"
-        )
-        return
-
-    if call.data.startswith("xp_yes_"):
-        req_id = call.data.split("_")[2]
-        data = pending_xp_requests.get(req_id)
-
-        if not data:
-            return
-
-        user_id = data["user_id"]
-        note = data["note"]
-
-        add_xp(user_id, 5)
-
-        supabase.table("notes").insert({
-            "user_id": user_id,
-            "note": note,
-            "date": datetime.now().strftime("%d.%m.%Y %H:%M")
-        }).execute()
-
-        bot.send_message(chat_id, "✅ Bestätigt")
-        bot.send_message(user_id, "💳 Einzahlung bestätigt +5 XP")
-
-        pending_xp_requests.pop(req_id, None)
-        return
-
-    if call.data.startswith("xp_no_"):
-        req_id = call.data.split("_")[2]
-        pending_xp_requests.pop(req_id, None)
-        bot.send_message(chat_id, "❌ Abgelehnt")
+        bot.send_message(chat_id, "🔥 Anfrage gesendet 😉")
         return
 
 # ---------------- SCREENSHOT ----------------
@@ -299,57 +266,63 @@ def screenshot(message):
         reply_markup=markup
     )
 
-# ---------------- NOTES ----------------
+# ---------------- NOTES (FIXED) ----------------
 @bot.message_handler(commands=["notes"])
 def notes(message):
+    try:
+        res = supabase.table("notes").select("*").eq("user_id", str(message.from_user.id)).execute()
 
-    res = supabase.table("notes").select("*").eq("user_id", str(message.from_user.id)).execute()
+        if not res.data:
+            bot.send_message(message.chat.id, "Keine Einzahlungen")
+            return
 
-    if not res.data:
-        bot.send_message(message.chat.id, "Keine Einzahlungen")
-        return
+        text = "💰 Einzahlungen:\n\n"
+        for n in res.data:
+            text += f"{n['note']} ({n['date']})\n"
 
-    text = "💰 Einzahlungen:\n\n"
+        bot.send_message(message.chat.id, text)
 
-    for n in res.data:
-        text += f"{n['note']} ({n['date']})\n"
+    except:
+        bot.send_message(message.chat.id, "⚠️ Fehler beim Laden der Notes")
 
-    bot.send_message(message.chat.id, text)
-
-# ---------------- REF ----------------
-@bot.message_handler(commands=["ref"])
-def ref(message):
-    user = get_user(message.from_user.id)
-    link = f"https://t.me/Freispielritterbot?start={user['ref_code']}"
-    bot.send_message(message.chat.id, f"🔗 {link}\n👥 {user.get('invites',0)} Invites")
-
-# ---------------- INVITES ----------------
+# ---------------- INVITES (FIXED) ----------------
 @bot.message_handler(commands=["invites"])
 def invites(message):
-    user = get_user(message.from_user.id)
-    lst = user.get("invite_list") or []
+    try:
+        user = get_user(message.from_user.id)
+        lst = user.get("invite_list") or []
 
-    if not lst:
-        bot.send_message(message.chat.id, "Keine Invites")
-        return
+        if not lst:
+            bot.send_message(message.chat.id, "Keine Invites")
+            return
 
-    text = ""
-    for i in lst:
-        text += f"@{i['username']} ({i['date']})\n"
+        text = ""
+        for i in lst:
+            text += f"@{i['username']} ({i['date']})\n"
 
-    bot.send_message(message.chat.id, text)
+        bot.send_message(message.chat.id, text)
 
-# ---------------- TOP ----------------
+    except:
+        bot.send_message(message.chat.id, "⚠️ Fehler beim Laden der Invites")
+
+# ---------------- TOP (FIXED) ----------------
 @bot.message_handler(commands=["top"])
 def top(message):
+    try:
+        res = supabase.table("users").select("id,invites").order("invites", desc=True).limit(5).execute()
 
-    res = supabase.table("users").select("id,invites").order("invites", desc=True).limit(5).execute()
+        if not res.data:
+            bot.send_message(message.chat.id, "Keine Daten")
+            return
 
-    text = "🏆 Top:\n\n"
-    for i, u in enumerate(res.data, 1):
-        text += f"{i}. {str(u['id'])[:3]}*** - {u['invites']}\n"
+        text = "🏆 Top:\n\n"
+        for i, u in enumerate(res.data, 1):
+            text += f"{i}. {str(u['id'])[:3]}*** - {u['invites']}\n"
 
-    bot.send_message(message.chat.id, text)
+        bot.send_message(message.chat.id, text)
+
+    except:
+        bot.send_message(message.chat.id, "⚠️ Fehler beim Laden der Topliste")
 
 # ---------------- XP ----------------
 @bot.message_handler(commands=["xp"])
@@ -362,8 +335,13 @@ def xp(message):
 
 # ---------------- RUN ----------------
 def run():
-    app.run(host="0.0.0.0", port=8080)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
 if __name__ == "__main__":
+    import sys
+
+    if os.getenv("RUN_MAIN") == "true":
+        sys.exit()
+
     threading.Thread(target=run).start()
-    bot.infinity_polling()
+    bot.infinity_polling(skip_pending=True, timeout=30)
