@@ -253,7 +253,8 @@ def callback(call):
 
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("🔥 Top Deal 😉", callback_data="top_deal"))
-        markup.add(types.InlineKeyboardButton("🥇 Goldzino", url="https://track.stormaffiliates.com/visit/?bta=35714&brand=goldzino&afp=freispielritter&utm_campaign=freispielritter"))
+        markup.add(types.InlineKeyboardButton("🚀 Mirax Casino", url="https://mirax.partners/pdxnhal92"))
+        markup.add(types.InlineKeyboardButton("🎲 7bit Casino", url="https://7bit.partners/pmprj8i5n"))
         markup.add(types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25"))
         markup.add(types.InlineKeyboardButton("💰 Crypto Casino", url="https://t.me/tgcplaybot/?start=UsHEI0AGB"))
 
