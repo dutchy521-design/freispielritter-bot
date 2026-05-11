@@ -257,7 +257,10 @@ def callback(call):
         markup.add(types.InlineKeyboardButton("🎲 7bit Casino", url="https://7bit.partners/pmprj8i5n"))
         markup.add(types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25"))
         markup.add(types.InlineKeyboardButton("💰 Crypto Casino", url="https://t.me/tgcplaybot/?start=UsHEI0AGB"))
-
+        markup.add(types.InlineKeyboardButton("👑 Crownslots", url="https://crownslotslink.com/h70a5rwfg"))
+        markup.add(types.InlineKeyboardButton("⚡ Evospin", url="https://evospinlink.com/hgnofgc6i"))
+        markup.add(types.InlineKeyboardButton("🌀 Neospin", url="https://neospinlink.com/hxfz5pzin"))
+        markup.add(types.InlineKeyboardButton("🔫 Gunsbet", url="https://gunsbetlink.com/h2briwudx"))
         bot.send_message(chat_id, "🎰 Wähle deinen Deal:", reply_markup=markup)
         return
 
