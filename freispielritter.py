@@ -261,6 +261,8 @@ def callback(call):
         markup.add(types.InlineKeyboardButton("⚡ Evospin", url="https://evospinlink.com/hgnofgc6i"))
         markup.add(types.InlineKeyboardButton("🌀 Neospin", url="https://neospinlink.com/hxfz5pzin"))
         markup.add(types.InlineKeyboardButton("🔫 Gunsbet", url="https://gunsbetlink.com/h2briwudx"))
+        markup.add(types.InlineKeyboardButton("🃏 StakeJoker", url="https://offers.stakejoker.com/?offer=3&uid=019e15bf-d7ff-768a-a79b-d80bd7a4c0b6"))
+        markup.add(types.InlineKeyboardButton("🎩 Mr.Punter", url="https://mrp.naralvin.com/?mid=371120_2143474"))
         bot.send_message(chat_id, "🎰 Wähle deinen Deal:", reply_markup=markup)
         return
 
