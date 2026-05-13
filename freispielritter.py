@@ -253,6 +253,8 @@ def callback(call):
 
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("🔥 Top Deal 😉", callback_data="top_deal"))
+        markup.add(types.InlineKeyboardButton("🃏 StakeJoker(+Doppelte XP)", url="https://offers.stakejoker.com/?offer=3&uid=019e15bf-d7ff-768a-a79b-d80bd7a4c0b6"))
+        markup.add(types.InlineKeyboardButton("🎩 Mr.Punter(MEGA DEAL)", url="https://mrp.naralvin.com/?mid=371120_2143474"))
         markup.add(types.InlineKeyboardButton("🚀 Mirax Casino", url="https://mirax.partners/pdxnhal92"))
         markup.add(types.InlineKeyboardButton("🎲 7bit Casino", url="https://7bit.partners/pmprj8i5n"))
         markup.add(types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25"))
@@ -261,8 +263,6 @@ def callback(call):
         markup.add(types.InlineKeyboardButton("⚡ Evospin", url="https://evospinlink.com/hgnofgc6i"))
         markup.add(types.InlineKeyboardButton("🌀 Neospin", url="https://neospinlink.com/hxfz5pzin"))
         markup.add(types.InlineKeyboardButton("🔫 Gunsbet", url="https://gunsbetlink.com/h2briwudx"))
-        markup.add(types.InlineKeyboardButton("🃏 StakeJoker", url="https://offers.stakejoker.com/?offer=3&uid=019e15bf-d7ff-768a-a79b-d80bd7a4c0b6"))
-        markup.add(types.InlineKeyboardButton("🎩 Mr.Punter", url="https://mrp.naralvin.com/?mid=371120_2143474"))
         bot.send_message(chat_id, "🎰 Wähle deinen Deal:", reply_markup=markup)
         return
 
