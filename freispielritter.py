@@ -255,6 +255,8 @@ def callback(call):
         markup.add(types.InlineKeyboardButton("🔥 Top Deal 😉", callback_data="top_deal"))
         markup.add(types.InlineKeyboardButton("🃏 StakeJoker(+Doppelte XP)", url="https://offers.stakejoker.com/?offer=3&uid=019e15bf-d7ff-768a-a79b-d80bd7a4c0b6"))
         markup.add(types.InlineKeyboardButton("🎩 Mr.Punter(MEGA DEAL)", url="https://mrp.naralvin.com/?mid=371120_2143474"))
+        markup.add(types.InlineKeyboardButton("💎 SGCasino (Exklusiv)", url="https://sgc.monalvor.com/?mid=371601_2146751"))
+        markup.add(types.InlineKeyboardButton("🔷 AlfCasino (Diamond Deal)", url="https://alcw.monalvor.com/?mid=371601_2146754"))
         markup.add(types.InlineKeyboardButton("🚀 Mirax Casino", url="https://mirax.partners/pdxnhal92"))
         markup.add(types.InlineKeyboardButton("🎲 7bit Casino", url="https://7bit.partners/pmprj8i5n"))
         markup.add(types.InlineKeyboardButton("🎁 Freispiele", url="https://1f0s0.fit/r/XJTWVH25"))
