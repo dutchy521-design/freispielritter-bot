@@ -389,9 +389,55 @@ if __name__ == "__main__":
 
     threading.Thread(target=run).start()
 
+    threading.Thread(target=matchmaker_loop, daemon=True).start()
+    
     # 🔥 EINZIGER FIX: Auto-Restart bei Crash
     while True:
         try:
             bot.infinity_polling(skip_pending=True, timeout=30)
         except Exception as e:
             print("Polling crashed, restarting...", e)
+import time
+
+def matchmaker_loop():
+
+    while True:
+
+        try:
+            # 1. hole wartende Spieler
+            queue = supabase.table("game_queue") \
+                .select("*") \
+                .eq("status", "waiting") \
+                .limit(2) \
+                .execute()
+
+            if len(queue.data) >= 2:
+
+                p1 = queue.data[0]
+                p2 = queue.data[1]
+
+                match_id = str(random.randint(100000, 999999))
+
+                # 2. Match erstellen
+                supabase.table("game_matches").insert({
+                    "id": match_id,
+                    "player1": p1["user_id"],
+                    "player2": p2["user_id"],
+                    "status": "active"
+                }).execute()
+
+                # 3. Queue updaten → beide rausnehmen
+                supabase.table("game_queue") \
+                    .update({"status": "matched"}) \
+                    .eq("user_id", p1["user_id"]) \
+                    .execute()
+
+                supabase.table("game_queue") \
+                    .update({"status": "matched"}) \
+                    .eq("user_id", p2["user_id"]) \
+                    .execute()
+
+        except Exception as e:
+            print("matchmaker error:", e)
+
+        time.sleep(3)
