@@ -381,24 +381,6 @@ def broadcast(message):
 def run():
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
-if __name__ == "__main__":
-    import sys
-
-    if os.getenv("RUN_MAIN") == "true":
-        sys.exit()
-
-    threading.Thread(target=run).start()
-
-    threading.Thread(target=matchmaker_loop, daemon=True).start()
-    
-    # 🔥 EINZIGER FIX: Auto-Restart bei Crash
-    while True:
-        try:
-            bot.infinity_polling(skip_pending=True, timeout=30)
-        except Exception as e:
-            print("Polling crashed, restarting...", e)
-import time
-
 def matchmaker_loop():
 
     while True:
@@ -441,3 +423,23 @@ def matchmaker_loop():
             print("matchmaker error:", e)
 
         time.sleep(3)
+
+if __name__ == "__main__":
+    import sys
+
+    if os.getenv("RUN_MAIN") == "true":
+        sys.exit()
+
+    threading.Thread(target=run).start()
+
+    threading.Thread(target=matchmaker_loop, daemon=True).start()
+    
+    # 🔥 EINZIGER FIX: Auto-Restart bei Crash
+    while True:
+        try:
+            bot.infinity_polling(skip_pending=True, timeout=30)
+        except Exception as e:
+            print("Polling crashed, restarting...", e)
+import time
+
+
