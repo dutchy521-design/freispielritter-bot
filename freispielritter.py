@@ -146,7 +146,10 @@ def start(message):
     ref = args[1] if len(args) > 1 else None
 
     user = get_user(message.from_user.id)
-
+    update_user(message.from_user.id, {
+    "first_name": message.from_user.first_name or "",
+    "username": message.from_user.username or ""
+})
     if ref and not user.get("used_ref"):
         ref_user_id = supabase.table("users").select("id").eq("ref_code", ref).execute()
 
