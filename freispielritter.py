@@ -61,6 +61,8 @@ def get_user(user_id):
 
     new_user = {
         "id": user_id,
+        "first_name": "",
+        "username": "",
         "xp": 0,
         "level": 1,
         "invites": 0,
@@ -93,7 +95,10 @@ def add_xp(user_id, amount):
 def daily(message):
 
     user = get_user(message.from_user.id)
-
+    update_user(message.from_user.id, {
+    "first_name": message.from_user.first_name or "",
+    "username": message.from_user.username or ""
+})
     now = datetime.now()
     last = user.get("last_daily")
     streak = int(user.get("daily_streak") or 0)
@@ -330,7 +335,45 @@ def xp(message):
         message.chat.id,
         f"⭐ XP: {user['xp']}\n🏆 Level: {user['level']}\n🎖 Rang: {get_level_name(user['level'])}"
     )
+# ---------------- BROADCAST ----------------
+@bot.message_handler(commands=["broadcast"])
+def broadcast(message):
 
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    text = message.text.replace("/broadcast", "").strip()
+
+    if not text:
+        bot.send_message(message.chat.id, "❌ Bitte Nachricht eingeben.")
+        return
+
+    users = supabase.table("users").select("*").execute()
+
+    sent = 0
+
+    for user in users.data:
+
+        try:
+            user_id = user["id"]
+            first_name = user.get("first_name") or "Ritter"
+
+            final_text = f"""
+👋 Hallo {first_name},
+
+{text}
+
+🍀 Viel Glück!
+"""
+
+            bot.send_message(user_id, final_text)
+
+            sent += 1
+
+        except Exception as e:
+            print(e)
+
+    bot.send_message(message.chat.id, f"✅ Rundmail an {sent} User gesendet.")
 # ---------------- RUN ----------------
 def run():
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
