@@ -83,14 +83,18 @@ def update_user(user_id, fields):
 
 def add_xp(user_id, amount):
     user = get_user(user_id)
+
+    old_level = int(user.get("level", 1))
     xp = int(user.get("xp", 0)) + amount
-    level = (xp // 100) + 1
+    new_level = (xp // 100) + 1
 
     update_user(user_id, {
         "xp": xp,
-        "level": level
+        "level": new_level
     })
 
+    if new_level > old_level:
+        bot.send_message(user_id, f"🎉 Level Up! Du bist jetzt Level {new_level}")
 # ---------------- DAILY ----------------
 @bot.message_handler(commands=["daily"])
 def daily(message):
