@@ -2,6 +2,7 @@ import telebot
 import os
 import random
 import string
+import time
 from telebot import types
 from flask import Flask
 import threading
@@ -388,15 +389,17 @@ def matchmaker_loop():
         try:
             # 1. hole wartende Spieler
             queue = supabase.table("game_queue") \
-                .select("*") \
-                .eq("status", "waiting") \
-                .limit(2) \
-                .execute()
+            .select("*") \
+            .eq("status", "waiting") \
+            .order("created_at") \
+           .execute()
 
-            if len(queue.data) >= 2:
+players = queue.data or []
 
-                p1 = queue.data[0]
-                p2 = queue.data[1]
+print("QUEUE SIZE:", len(players))
+
+if len(players) >= 2:
+                p1, p2 = players[0], players[1]
 
                 match_id = str(random.randint(100000, 999999))
 
@@ -440,6 +443,6 @@ if __name__ == "__main__":
             bot.infinity_polling(skip_pending=True, timeout=30)
         except Exception as e:
             print("Polling crashed, restarting...", e)
-import time
+
 
 
