@@ -391,31 +391,37 @@ def matchmaker_loop():
     while True:
 
         try:
-            # 1. hole wartende Spieler
+
             queue = supabase.table("game_queue") \
-            .select("*") \
-            .eq("status", "waiting") \
-            .order("created_at") \
-           .execute()
+                .select("*") \
+                .eq("status", "waiting") \
+                .order("created_at") \
+                .execute()
 
-players = queue.data or []
+            players = queue.data or []
 
-print("QUEUE SIZE:", len(players))
+            print("QUEUE SIZE:", len(players))
 
-if len(players) >= 2:
-                p1, p2 = players[0], players[1]
+            if len(players) >= 2:
+
+                p1 = players[0]
+                p2 = players[1]
 
                 match_id = str(random.randint(100000, 999999))
 
-                # 2. Match erstellen
+                # MATCH ERSTELLEN
                 supabase.table("game_matches").insert({
                     "id": match_id,
                     "player1": p1["user_id"],
                     "player2": p2["user_id"],
-                    "status": "active"
+                    "status": "active",
+                    "p1_roll": None,
+                    "p2_roll": None,
+                    "winner": None,
+                    "match_finished": False
                 }).execute()
 
-                # 3. Queue updaten → beide rausnehmen
+                # QUEUE UPDATEN
                 supabase.table("game_queue") \
                     .update({"status": "matched"}) \
                     .eq("user_id", p1["user_id"]) \
@@ -425,6 +431,8 @@ if len(players) >= 2:
                     .update({"status": "matched"}) \
                     .eq("user_id", p2["user_id"]) \
                     .execute()
+
+                print(f"MATCH CREATED: {match_id}")
 
         except Exception as e:
             print("matchmaker error:", e)
